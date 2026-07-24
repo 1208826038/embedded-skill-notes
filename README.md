@@ -15,6 +15,7 @@
 | `面试神器_章子淳.html` | 单文件离线 Web 应用：模拟面试（145 题 + 语音朗读/作答 + 智能评分 + 弱项复习 + 面试官追问）+ 知识学习（内嵌上述文档，可搜索）+ 收藏进度 |
 | `polyspace_automation.py` | **Polyspace 静态分析（MISRA / 功能安全）自动化脚本**，自动建工程、跑分析、处理报告、出 JSON 汇总 |
 | `qac_report_automation.py` | **QAC（QA-C）静态分析自动化 + 报告聚合脚本**，跑 QA-C 分析、管理 suppression/justification、用 protobuf 聚合报告（⚠️ 依赖 `Reports_pb2.py` / `ReportHelpers.py` / `schema/`，仓库未含，需自备） |
+| `dbc_to_tcan_converter.py` | **DBC → TCAN 配置转换 GUI 工具**（Tkinter），将 CAN 的 DBC 数据库转换为 `Can_44_TCAN4x5x` 的 PBcfg 配置代码；纯标准库、可独立运行 |
 
 > 注：原始脚本文件名为 `新建 文本文档.txt`，内容为 Python，已重命名为 `polyspace_automation.py` 便于分享与运行。另一份 `新建 文本文档 - 副本.txt` 实为**不同的 QAC（QA-C）工具**（非 Polyspace 副本），已重命名为 `qac_report_automation.py`。
 

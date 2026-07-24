@@ -14,8 +14,11 @@
 | `外设协议详解_章子淳.md` | 13 种外设协议逐字段（逐位/逐参数）详解 + 对应面试题（CAN/LIN/SPI/I²C/SMBus/UART/SENT/FlexRay/车载以太网/PWM/ICU/ADC/GPIO/DSI3/PSI5） |
 | `面试神器_章子淳.html` | 单文件离线 Web 应用：模拟面试（145 题 + 语音朗读/作答 + 智能评分 + 弱项复习 + 面试官追问）+ 知识学习（内嵌上述文档，可搜索）+ 收藏进度 |
 | `polyspace_automation.py` | **Polyspace 静态分析（MISRA / 功能安全）自动化脚本**，自动建工程、跑分析、处理报告、出 JSON 汇总 |
+| `qac_report_automation.py` | **QAC（QA-C）静态分析自动化 + 报告聚合脚本**，跑 QA-C 分析、管理 suppression/justification、用 protobuf 聚合报告（⚠️ 依赖 `Reports_pb2.py` / `ReportHelpers.py` / `schema/`，仓库未含，需自备） |
 
-> 注：原始脚本文件名为 `新建 文本文档.txt`，内容为 Python，已重命名为 `polyspace_automation.py` 便于分享与运行。
+> 注：原始脚本文件名为 `新建 文本文档.txt`，内容为 Python，已重命名为 `polyspace_automation.py` 便于分享与运行。另一份 `新建 文本文档 - 副本.txt` 实为**不同的 QAC（QA-C）工具**（非 Polyspace 副本），已重命名为 `qac_report_automation.py`。
+
+📌 **关于 `qac_report_automation.py` 的依赖**：该脚本依赖同目录的 `Reports_pb2.py`（protobuf 生成）、`ReportHelpers.py`（含 `Global` 类）、`schema/` 等本地模块，仓库中**未包含**。若需要它真正跑起来，请补充这些文件后提交；当前仅作源码参考分享。
 
 ---
 

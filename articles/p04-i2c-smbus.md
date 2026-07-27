@@ -16,6 +16,21 @@ I²C 只有两根线：**SCL（时钟）**和 **SDA（数据）**。两者都是
 
 这带来一个关键特性：**线与（Wired-AND）**——只要任意一个设备拉低，整条线就是低；只有所有设备都释放，线才被上拉成高。正是这个特性，让 I²C 能在没有仲裁线的情况下实现**多主竞争**：两个主设备同时发，谁发 0 谁就把线拉低，发 1 的那方读回发现自己想发 1 却读到 0，立刻知道自己输了仲裁，自动退出发送。
 
+> **图：开漏线与仲裁** —— 主A发0拉低SDA、主B发1释放，线与使总线为低；B回读发现不符即判仲裁失败，退出发送。
+
+```mermaid
+sequenceDiagram
+    participant A as 主A (发 0)
+    participant Bus as SDA 开漏线与
+    participant B as 主B (发 1)
+    A->>Bus: 拉低 SDA（发 0）
+    B->>Bus: 释放 SDA（想发 1）
+    Note over Bus: 线与生效：只要有人拉低，总线=低
+    B-->>Bus: 回读发现 0 ≠ 自己发的1 → 仲裁失败
+    B-->>Bus: 立即退出发送，让出总线
+    Note over A: 赢得仲裁，继续占用总线
+```
+
 ### 2.2 上拉电阻取值：在上升沿与功耗间折中
 
 上拉电阻不能随便选：
@@ -40,6 +55,22 @@ I²C 没有 CS，也没有独立的同步线以外的特殊信号，它靠**在 
 
 ```
 START | ADDR(7)+W(0) | ACK | REG(8) | ACK | DATA(8) | ACK | ... | STOP
+```
+
+> **图：I²C 写事务时序** —— SCL高时SDA高→低为START，逐字节后接收方拉低SDA回ACK，SCL高时SDA低→高为STOP。
+
+```mermaid
+sequenceDiagram
+    participant M as 主设备
+    participant S as 从设备
+    M->>S: START（SCL高时 SDA 高→低）
+    M->>S: ADDR(7)+W(0)
+    S-->>M: ACK（SDA 拉低）
+    M->>S: REG(8)
+    S-->>M: ACK
+    M->>S: DATA(8)
+    S-->>M: ACK
+    M->>S: STOP（SCL高时 SDA 低→高）
 ```
 
 ### 3.2 典型读事务（含重复起始）

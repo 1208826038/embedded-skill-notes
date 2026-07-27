@@ -89,5 +89,50 @@ python polyspace_automation.py -mode=ci -analysismode=specify -file=./changedFil
 
 ---
 
+## 📝 技术文章系列（33 篇）
+
+基于仓库内两份梳理文档，为每个知识点撰写的长文深讲（场景引入 → 核心原理 → 生动类比 → 代码/时序 → 常见坑 → 面试要点），适合系统复习，也可作为个人技术博客 / 作品集。
+
+### 一、技能梳理（20 篇）
+
+1. [ARM Cortex-R/M 内核与底层架构](articles/01-arm-cortex-rm.md)
+2. [RTOS 与系统调优](articles/02-rtos-tuning.md)
+3. [功能安全 ISO 26262](articles/03-functional-safety.md)
+4. [MCAL 驱动开发实战](articles/04-mcal-driver.md)
+5. [车载通信协议精要](articles/05-comm-protocols.md)
+6. [编译与链接](articles/06-compile-link.md)
+7. [工具链自动化与工程效率](articles/07-toolchain-automation.md)
+8. [国产芯片替代与硬件联调](articles/08-domestic-chip.md)
+9. [跨团队协同与需求管理](articles/09-cross-team.md)
+10. [BMS 电池管理系统专项](articles/10-bms-system.md)
+11. [诊断与刷写（UDS/Bootloader/OTA）](articles/11-diag-uds-bootloader.md)
+12. [看门狗、ECC 与故障诊断](articles/12-watchdog-ecc.md)
+13. [低功耗与电源管理](articles/13-low-power.md)
+14. [存储管理](articles/14-storage-management.md)
+15. [AUTOSAR 架构深度](articles/15-autosar-arch.md)
+16. [测试验证与 CI](articles/16-testing-ci.md)
+17. [实时性分析与时序](articles/17-realtime-timing.md)
+18. [芯片准入与车规认证](articles/18-automotive-cert.md)
+19. [数字电路与信号完整性](articles/19-signal-integrity.md)
+20. [项目深挖与高频真题自测](articles/20-project-deep-dive.md)
+
+### 二、外设协议（13 篇）
+
+- [CAN / CAN FD 深度解析](articles/p01-can-canfd.md)
+- [LIN 总线详解](articles/p02-lin.md)
+- [SPI 串行外设接口](articles/p03-spi.md)
+- [I²C 与 SMBus](articles/p04-i2c-smbus.md)
+- [UART / USART 异步串行](articles/p05-uart.md)
+- [SENT 单边沿调制](articles/p06-sent.md)
+- [FlexRay](articles/p07-flexray.md)
+- [车载以太网](articles/p08-ethernet.md)
+- [PWM / ICU 定时器接口](articles/p09-pwm-icu.md)
+- [ADC 模拟数字转换](articles/p10-adc.md)
+- [GPIO 通用输入输出](articles/p11-gpio.md)
+- [DSI3 电芯监控菊花链](articles/p12-dsi3.md)
+- [PSI5 / SPC 传感器接口](articles/p13-psi5-spc.md)
+
+---
+
 ## ⚠️ 免责声明
 本仓库为**个人学习与技术沉淀材料**，部分脚本源自实际工程实践、已做脱敏（不含密码 / Token / 内网地址）。`polyspace_automation.py` 依赖特定目录结构与 MATLAB Polyspace 环境，直接套用前请按你的项目结构调整。内容仅供学习参考，欢迎交流指正。

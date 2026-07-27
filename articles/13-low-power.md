@@ -21,6 +21,20 @@
 
 休眠目标：整车下电后 BMS 漏电极小（μA 级），同时保留"被 CAN 帧/钥匙/定时"唤醒的能力。
 
+```mermaid
+stateDiagram-v2
+    [*] --> Run
+    Run --> Sleep : 内核停,外设保持
+    Sleep --> Stop : 停时钟,RAM保持
+    Stop --> Standby : Up
+    Standby --> Run : 唤醒=复位
+    Stop --> Run : 唤醒源触发
+    Sleep --> Run : 唤醒源触发
+    Run --> Stop : 进入低功耗
+```
+
+> 图：MCU 功耗状态机，越深越省电但唤醒越难，唤醒后从停住处继续或等同复位。
+
 ### 2.2 SBC / PMIC：整车电源的"总闸"
 
 SBC（System Basis Chip，系统基础芯片）或 PMIC 不只是供电（LDO/DC-DC），还集成：
@@ -30,6 +44,21 @@ SBC（System Basis Chip，系统基础芯片）或 PMIC 不只是供电（LDO/DC
 - **电源时序控制**（上电顺序、下电顺序）。
 
 它相当于整车低压电源的总闸。MCU 说"我要睡"，得先跟 SBC 打个招呼，由 SBC 把外围电源掐掉，只留最小唤醒电路。
+
+```mermaid
+flowchart TD
+    VBAT[低压电瓶 VBAT] --> SBC[SBC/PMIC 总闸]
+    SBC --> LDO1[MCU 核心 LDO]
+    SBC --> DC1[外设 DC-DC]
+    SBC --> WDT[内部看门狗]
+    SBC --> WAKE[唤醒源管理<br/>CAN/IO/RTC]
+    LDO1 --> MCU[MCU]
+    DC1 --> PER[外设/收发器]
+    WAKE -->|唤醒脉冲| MCU
+    MCU -->|请求待机| SBC
+```
+
+> 图：SBC/PMIC 电源树，集成供电、看门狗与唤醒管理，作为整车低压电源总闸。
 
 ### 2.3 唤醒源：谁能把系统叫醒
 

@@ -59,6 +59,18 @@ AppEntry_t entry = (AppEntry_t)reset;
 entry();                              /* 永不返回 */
 ```
 
+> 图：从芯片上电到 `main()` 的启动全流程，最后一步 VTOR 可重映射向量表以支持 Bootloader 与双 Bank 升级。
+
+```mermaid
+graph TD
+    A[上电 从 0x0000_0000 取指] --> B[取 MSP 初始值 建立 C 栈]
+    B --> C[跳转到 Reset_Handler]
+    C --> D[拷贝 .data Flash→RAM 清零 .bss]
+    D --> E[SystemInit 配置时钟 PLL 看门狗]
+    E --> F[进入 main 函数]
+    F --> G[VTOR 重映射向量表 支持 Bootloader/双Bank]
+```
+
 ## 五、Cache、TCM 与 MPU：内存子系统的三件套
 
 ### 1. Cache 与一致性问题
@@ -94,6 +106,18 @@ MPU->RASR = MPU_RASR_AP(0x3)        /* 全访问 */
 ## 六、特权模式与安全状态
 
 Cortex-M 有**特权（Privileged）**与**非特权（Unprivileged）**两种模式，以及可选的 TrustZone。底层驱动（操作寄存器、改 VTOR、配 MPU）必须在特权模式运行；应用层代码可运行在非特权模式，一旦越权访问外设寄存器，MPU 立即触发 Fault。这是"最小权限原则"在嵌入式上的落地——即使应用层被污染，也碰不到硬件关键资源。
+
+> 图：Cortex-M 的 Thread/Handler 模式与特权/非特权分级，非特权任务越权访问外设由 MPU 拦截触发 Fault。
+
+```mermaid
+graph TD
+    H[Handler 模式 异常上下文] -->|总是特权| P[Privileged 特权模式]
+    T[Thread 模式 任务上下文] -->|CONTROL.nPRIV=0| P
+    T -->|CONTROL.nPRIV=1| U[Unprivileged 非特权模式]
+    P -->|底层驱动 操作寄存器 改 VTOR 配 MPU| HW[硬件关键资源]
+    U -->|越权访问外设| MPU[MPU 触发 MemManage Fault]
+    TZ[可选 TrustZone 安全状态] -.隔离.-> P
+```
 
 ## 七、常见坑与调试手段
 

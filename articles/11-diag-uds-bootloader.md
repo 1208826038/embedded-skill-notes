@@ -60,6 +60,19 @@ void JumpToApp(uint32_t appAddr) {
 }
 ```
 
+```mermaid
+flowchart TD
+    A[ECU 上电] --> B{升级请求标志?}
+    B -- 有 --> C{App 完整性校验<br/>CRC/签名/magic}
+    B -- 无 --> C
+    C -- 有效 --> D[重映射 VTOR<br/>切 MSP]
+    D --> E[跳 App Reset_Handler]
+    C -- 无效 --> F[停留等待刷写]
+    E --> G[应用运行]
+```
+
+> 图：Bootloader 上电后的跳转决策流程，校验通过才重映射向量表并跳入 App。
+
 ### 2.4 A/B Bank：让升级"原子化"
 
 Flash 擦写寿命有限且不能边执行边擦同区。双 Bank 方案把 Flash 分为 A、B 两个独立区：
@@ -71,6 +84,19 @@ Flash 擦写寿命有限且不能边执行边擦同区。双 Bank 方案把 Flas
 - 重启后 Bootloader 读标志，跳入新版本。
 
 中途掉电？B 没写完，标志没翻，重启仍跳 A——旧版本完好。这就是"失败了能回滚"的本质。
+
+```mermaid
+flowchart TD
+    A[OTA 云端下发固件] --> B[写入非活动 Bank B]
+    B --> C{CRC/哈希/签名校验}
+    C -- 失败 --> D[丢弃 B,重启仍跳 A]
+    C -- 通过 --> E[翻转活动区标志 A→B]
+    E --> F[重启]
+    F --> G{读活动区标志}
+    G --> H[跳入新版本 App]
+```
+
+> 图：A/B 双 Bank OTA 流程，只有校验通过才翻转活动区标志，实现失败回滚。
 
 ### 2.5 OTA：从云端到 Flash 的搬运
 

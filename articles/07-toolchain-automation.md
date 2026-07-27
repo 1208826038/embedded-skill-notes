@@ -35,6 +35,21 @@
 3. **可维护**：代码与 DBC 强绑定，review 时直接 diff DBC 就知道通信变了什么。
 4. **双协议复用**：同一生成管线，CAN 和 CAN FD 共用，消除双版本维护与分支漂移。
 
+> DBC 驱动代码生成的端到端流程：
+
+```mermaid
+graph LR
+    DBC["DBC 数据库<br/>报文 / 信号契约<br/>(单一真相源)"] --> G["Python 生成脚本"]
+    G -->|"自动产出"| C["pack / unpack 编解码代码"]
+    G -->|"同时产出"| COM["AUTOSAR COM 配置<br/>ID / 周期 / 信号描述"]
+    G -->|"接线"| RTE["RTE 连接 SWC 与 COM"]
+    C --> B["编译进固件"]
+    COM --> B
+    RTE --> B
+    style DBC fill:#bfb,stroke:#333
+    style B fill:#bbf,stroke:#333
+```
+
 ## 四、关键代码：从 DBC 到 pack/unpack
 
 生成脚本的核心是把"信号 ↔ 字节流"的编解码逻辑自动产出。难点在于**字节序**。注意一个易混点：所谓 "Motorola 格式" 在 DBC 里其实是用**大端（跨字节高位在前）**的位布局，而 "Intel 格式" 是**小端（低字节在前）**。两种布局下，同一个信号落在字节流里的 bit 排列完全不同，pack/unpack 算法必须区分。
@@ -90,6 +105,24 @@ def unpack_signal(raw, sig):
 - **Motorola（大端，DBC 跨字节布局）**：信号最高位落在 start_bit 所在字节的高位，向低字节方向延伸，bit 排列与 Intel 正好镜像。
 
 两种布局下，同一个 12 位原始值写进字节流的二进制完全不同。生成代码必须按 `byte_order` 字段分两套算法——这正是为什么"字节序理解反"会让全车信号错位，也解释了为什么必须靠往返测试来兜底。
+
+> 嵌入开发流水线的 CI 自动化与往返测试流程：
+
+```mermaid
+flowchart TD
+    A["提交 DBC / 代码"] --> B["构建钩子: 计算 DBC 哈希"]
+    B -->|"哈希变化"| C["重新生成通信代码"]
+    B -->|"无变化"| D["复用既有代码"]
+    C --> E["编译 Build"]
+    D --> E
+    E --> F["CI: 单元测试"]
+    F --> G["往返测试 round-trip<br/>pack 成字节流 → unpack 还原"]
+    G -->|"通过"| H["发起 PR / 强制 Code Review"]
+    G -->|"失败"| I["拦截并修复生成器"]
+    H --> J["合入基线"]
+    style G fill:#bfb,stroke:#333
+    style I fill:#fbb,stroke:#333
+```
 
 ## 六、自动化路上的坑
 

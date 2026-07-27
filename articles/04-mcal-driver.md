@@ -12,6 +12,18 @@ AUTOSAR 分层自上而下是：应用层（SWC）→ RTE → 服务层 → ECU 
 
 我主导过跨 6 款芯片平台（瑞萨/英飞凌/芯驰/国芯/紫光/恩智浦）的 MCAL 与启动代码移植。核心经验是：**MCAL 配置随芯片不同而重写，但上层 OS/BSW 配置相对平台无关**——所以跨芯片靠 MCAL 重写 + 上层配置复用，配合芯片差异对照表和分平台管理的链接脚本。
 
+> 图：AUTOSAR 分层中 MCAL 的位置，它屏蔽芯片差异直接操作寄存器，CDD 旁路处理专用硬件。
+
+```mermaid
+graph TD
+    APP[应用层 SWC] --> RTE[RTE 运行时环境]
+    RTE --> BSW[服务层 / ECU 抽象层]
+    BSW --> MCAL[MCAL 微控制器抽象层]
+    MCAL --> REG[外设寄存器]
+    REG --> PERI[MCU 外设 ADC/PWM/CAN...]
+    CDD[CDD 复杂驱动] -.旁路.-> REG
+```
+
 ## 三、ADC + DMA + 硬件触发：零 CPU 抖动采样
 
 BMS 高压采样的关键链路是：**分压电阻网络 + RC 滤波 → 多路 MUX → ADC → DMA → 内存 buffer**。要拿到稳定数据，三个机制缺一不可：
@@ -39,6 +51,19 @@ ADC->CR2 |= ADC_CR2_EXTEN_RISING | ADC_CR2_EXTSEL_TIM_TRGO;
 ```
 
 **类比**：采样电容像一个小水杯，建立时间就是"接水到满"的时间。你刚接了杯盐水（上一通道），没等杯子清空就接新水（新通道），尝起来自然带咸味——这就是通道串扰。留够建立时间，等于每次换水前把杯子倒干净。
+
+> 图：BMS 高压采样数据通路，定时器硬件触发 + DMA 零 CPU 抖动搬运，建立时间不足会引入通道串扰。
+
+```mermaid
+graph LR
+    V[电芯电压] --> RC[分压电阻 + RC 滤波]
+    RC --> MUX[多路 MUX 切换]
+    MUX --> ADC[ADC 采样保持 + 转换]
+    ADC -->|建立时间不足| WARN[串扰 / 精度偏低]
+    ADC --> DMA[DMA 自动搬运]
+    DMA --> BUF[内存 buffer]
+    TIM[定时器硬件触发] --> ADC
+```
 
 ## 四、高压采样与多路 MUX 的坑
 

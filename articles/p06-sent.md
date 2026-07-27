@@ -24,12 +24,41 @@ SENT 的基本时间单位是 **tick**（通常约 3 µs，由传感器内部时
 
 为什么用"间隔"而非"脉宽"？因为 SENT 每个脉冲都是固定宽度的低电平（下降沿触发、后跟固定宽度），真正的变量是**两个下降沿之间的距离（含高电平段）**，这样对上升/下降沿斜率、对电源幅值都不敏感。
 
+> 图：SENT 用"相邻下降沿的时间间隔"编码半字节——间隔 = 12 + nibble 值（tick 数），接收方数出间隔减去 12 即还原 0~15。
+
+```mermaid
+flowchart LR
+    V0[Nibble = 0] --> I0[间隔 12 tick]
+    V5[Nibble = 5] --> I5[间隔 17 tick]
+    V15[Nibble = 15] --> I15[间隔 27 tick]
+    I0 --> R[接收方: 数间隔 - 12 = nibble 值]
+    I5 --> R
+    I15 --> R
+```
+
 ## 三、帧格式逐字段拆解
 
 一帧（Fast Message，快速通道）结构如下：
 
 ```
 Sync(56 ticks 低电平) | Status/Comm(4 bit) | Data nibble×1~6 (各4bit) | CRC(4 bit) | Pause(可选)
+```
+
+> 图：SENT 快速通道帧——固定 56 tick 低电平 Sync 同步，其后每个 nibble/CRC 以"相邻下降沿间隔(12~27 tick)"编码，Pause 分隔帧或承载慢通道。
+
+```mermaid
+gantt
+    title SENT 快速通道帧（横轴 = tick 数，间隔即数据）
+    dateFormat X
+    axisFormat %s
+    section 帧
+    Sync 56t 低电平 : 0, 56
+    Status/Comm 12~27t : 56, 76
+    Nibble1 12~27t : 76, 96
+    Nibble2 12~27t : 96, 116
+    Nibble3 12~27t : 116, 136
+    CRC 12~27t : 136, 156
+    Pause 可变 : 156, 170
 ```
 
 逐字段含义：

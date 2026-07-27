@@ -18,6 +18,20 @@ RTOS 的核心是调度器。主流是**抢占式优先级调度**：高优先�
 
 **类比**：公司里老板（H）要等实习生（L）手里的文件才能签字，但此时一个经理（M）插队让实习生先帮自己干活，结果老板干等。解决方法是**优先级继承协议（PIP）**——L 一旦拿到锁，就临时把自己的优先级提升到 H 的级别，M 自然抢不过；或者用**优先级天花板（Ceiling）**——谁持锁谁直接升到"该锁天花板优先级"。AUTOSAR OS 的 Resource 机制底层就是这两种协议之一。
 
+> 图：RTOS 任务典型状态机，状态切换由调度器与 IPC/延时事件驱动。
+
+```mermaid
+stateDiagram-v2
+    [*] --> Ready: 任务创建
+    Ready --> Running: 调度器选中 / 抢占
+    Running --> Ready: 被更高优先级抢占 / 时间片用完
+    Running --> Blocked: 等待信号量 / 事件 / 延时
+    Blocked --> Ready: 事件发生 / 超时
+    Running --> Suspended: 任务挂起
+    Suspended --> Ready: 任务恢复
+    Running --> [*]: 任务删除
+```
+
 ## 三、CPU Loading 怎么分析与压下来
 
 定位 CPU Loading 高的手段有三类：RTOS 自带的 CPU 使用率钩子、逻辑分析仪/示波器打 GPIO 测任务占空比、性能计数器（PMU）采样。核心是**定位热点**——看哪个任务/中断占用时间最长，是轮询忙等、频繁中断，还是重计算。
@@ -67,6 +81,22 @@ volatile uint32_t evt_flag; /* 32 位，且禁止优化掉硬件访问 */
 4. **DMA 占用总线**：DMA  burst 抢走总线带宽，CPU 取指变慢。
 
 优化方向：临界区尽量短、用锁而非关全局中断、热路径放 TCM、关键数据进 DTCM、固定 Cache 策略。在功能安全场景，还要保证 ASIL 任务有确定时间窗（时间维度的 FFI）。
+
+> 图：优先级反转的发生与优先级继承协议（PIP）的修复过程，L 持锁时临时升到 H 的优先级。
+
+```mermaid
+sequenceDiagram
+    participant H as 高优先级任务 H
+    participant L as 低优先级任务 L
+    participant M as 中优先级任务 M
+    L->>L: 持有共享锁
+    H->>H: 就绪 请求锁 被 L 阻塞
+    M->>M: 抢占 L 运行 L 无法释放锁
+    Note over H,M: H 被 M 间接阻塞 = 优先级反转
+    L->>L: 优先级继承升至 H PIP 生效
+    M-->>L: 无法抢占 L 释放锁
+    H->>H: 获得锁 恢复运行
+```
 
 ## 六、常见坑与调试手段
 

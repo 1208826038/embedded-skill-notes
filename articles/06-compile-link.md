@@ -16,6 +16,19 @@
 - **链接（Linker）**：编辑把散稿按目录（链接脚本）装订成一本完整的书（可执行映像 `.elf/.hex`）。它干三件事：**合并同类段**（所有 `.text` 拼到代码区、所有 `.data` 拼到数据区）、**分配地址**（每段落在 Flash/RAM 的哪个物理地址）、**解析符号**（把"引用第几章"真正指到那页的地址）。
 - **map 文件**：就是这本"书的目录 + 索引"，记录了每个段落在哪、占多大、每个函数/变量地址多少。
 
+> 编译、汇编、链接到生成 map 文件的整体流程如下：
+
+```mermaid
+graph LR
+    A[".c 源文件<br/>预处理 / 编译"] -->|"编译器 Compiler"| B[".s 汇编代码"]
+    B -->|"汇编 Assembler"| C[".o 目标文件<br/>含未决符号"]
+    C -->|"链接 Linker<br/>合并段 / 分配地址 / 解析符号"| D[".elf / .hex 可执行映像"]
+    D -->|"链接器输出"| E["map 文件<br/>段落位 / 大小 / 地址索引"]
+    style A fill:#f9f,stroke:#333
+    style D fill:#bbf,stroke:#333
+    style E fill:#bfb,stroke:#333
+```
+
 在 GHS/Tasking 里，链接脚本（linker command file，`.lsl` / `.lid`）是**工程师手写的**，不像 Keil/IAR 很多自动生成。这意味着段地址、对齐、堆栈大小全由你定。权力越大，坑越多。
 
 几个关键段（Section）必须刻在骨头里：
@@ -27,6 +40,37 @@
 | `.data` | 已初始化全局变量 | 运行时在 RAM，初值存 Flash，启动时拷贝 |
 | `.bss` | 未初始化全局变量（默认 0） | RAM，启动时清零 |
 | 栈 / 堆 | 运行时动态 | RAM |
+
+> map 文件如实记录的内存布局与段落位（对应链接脚本 `MEMORY` / `SECTIONS`）：
+
+```mermaid
+graph TD
+    L["链接脚本 MEMORY / SECTIONS"] --> FLASH
+    L --> RAM
+    L --> ITCM
+    L --> DTCM
+
+    subgraph FLASH["FLASH (rx)"]
+        T1[".text 代码指令"]
+        R1[".rodata 常量"]
+    end
+    subgraph RAM["RAM (rwx)"]
+        D1[".data 已初始化全局变量"]
+        B1[".bss 未初始化全局变量"]
+        S1["栈 / 堆"]
+    end
+    subgraph ITCM["ITCM (实时)"]
+        I1[".text.os_tick / can_rx_isr"]
+    end
+    subgraph DTCM["DTCM (高频数据)"]
+        M1[".dma_buf 32 字节对齐"]
+    end
+
+    style FLASH fill:#eef,stroke:#333
+    style RAM fill:#efe,stroke:#333
+    style ITCM fill:#fee,stroke:#333
+    style DTCM fill:#ffe,stroke:#333
+```
 
 启动到 `main()` 之前，Reset_Handler 干的第一件事就是：**从 Flash 把 `.data` 初值拷进 RAM、把 `.bss` 清零**。如果链接脚本把 `.bss` 区划小了，清零会越界踩内存——这正是开头那场噩梦的来源。
 

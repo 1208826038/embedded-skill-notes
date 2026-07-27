@@ -32,6 +32,19 @@ EEPROM 能单字节改写、寿命高，但车规 MCU 内置 Flash 多、EEPROM 
 
 比喻：电梯里的地砖，大家都踩门口那块会先坏；磨损均衡就是"强制轮流让大家踩不同位置"。
 
+```mermaid
+flowchart TD
+    A[收到写请求 id] --> B[查找当前有效 block]
+    B --> C[选擦写次数最少/最老的候选 block]
+    C --> D[擦候选 sector]
+    D --> E[写新数据 + CRC + 版本]
+    E --> F[原子翻转标记为有效]
+    F --> G[旧 block 标记无效待擦]
+    G --> H[数据提交,均摊寿命]
+```
+
+> 图：磨损均衡写入流程，通过轮转选择擦写最少的 block 把寿命均摊到整片 Flash。
+
 ### 2.4 掉电保护：写-校验-拷贝-标志
 
 FEE 写关键参数的典型状态机：
@@ -60,6 +73,19 @@ STATE 取值:
   0x22222222 = 有效(已提交)
   0x33333333 = 已废弃(待擦)
 ```
+
+```mermaid
+stateDiagram-v2
+    [*] --> ERASED : 整块擦除
+    ERASED --> WRITING : 开始写数据
+    WRITING --> VALID : CRC校验通过并提交
+    WRITING --> ERASED : 掉电/校验失败回退
+    VALID --> INVALID : 有新版本提交
+    INVALID --> ERASED : 擦除复用
+    VALID --> VALID : 多个有效版,取最新
+```
+
+> 图：FEE 虚拟页（block）状态机，依靠状态字与 CRC 实现掉电不丢的可靠存储。
 
 ### 3.2 磨损均衡写入（伪代码）
 

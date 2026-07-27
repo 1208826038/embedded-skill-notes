@@ -29,6 +29,18 @@ MCAL (Microcontroller Abstraction Layer，直操寄存器)
 - **MCAL**：直接读写寄存器，屏蔽芯片差异；
 - **CDD（复杂驱动）**：旁路上层，直接访问 MCAL，用于特殊硬件（如 BMS 电芯监控链路）。
 
+```mermaid
+flowchart TD
+    SWC[应用层 SWC] --> RTE[RTE 生成代码]
+    RTE --> SVC[服务层 COM/DEM/NVM/OS/WDG]
+    SVC --> EAL[ECU 抽象层]
+    EAL --> MCAL[MCAL 直操寄存器]
+    MCAL --> MCU[微控制器 MCU]
+    CDD[复杂驱动 CDD] -->|旁路| MCAL
+```
+
+> 图：AUTOSAR 五层架构，硬件差异被压到最底层的 MCAL，上层应用可跨芯片复用。
+
 ### 2.2 RTE：SWC 之间的"邮局 + 翻译官"
 
 RTE 不用人写，由工具按配置**生成 C 代码**。它干两件事：
@@ -92,6 +104,25 @@ SWC --RTE--> NVM --FEE--> Flash  ─┤ 服务层各自独立
 ```
 
 ---
+
+```mermaid
+sequenceDiagram
+    participant SWC as BMS SWC
+    participant RTE as RTE
+    participant COM as COM/PduR
+    participant DEM as DEM
+    participant NVM as NVM/FEE
+    SWC->>RTE: 读电压 Rte_Read_Voltage
+    SWC->>RTE: 过压? 调 Dem_SetEventStatus
+    RTE->>DEM: 登记故障 DTC
+    SWC->>RTE: NvM_WriteBlock(安全日志)
+    RTE->>NVM: 排队写 Flash
+    SWC->>RTE: 周期广播电压信号
+    RTE->>COM: pack 信号
+    COM->>COM: PduR 路由 → CanIf → 总线
+```
+
+> 图：过压报故障并存档的协作时序，SWC 经 RTE 同时驱动 DEM 登记与 NVM/COM 存储广播。
 
 ## 四、常见坑与调试手段
 

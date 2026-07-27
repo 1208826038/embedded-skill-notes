@@ -43,6 +43,20 @@ SPI 的本质是主从各有一个**移位寄存器（Shift Register）**，在 
 
 **主从必须模式一致，否则整帧数据错位**。这是 SPI 通信出错的第一嫌疑。很多 datasheet 不直接写"Mode 3"，而是写"数据在 SCK 的上升沿采样、空闲时 SCK 为高"——你要把它翻译成 CPOL=1、CPHA=1（Mode 3）。
 
+> **图：SPI 全双工（主从同时移位）** —— 每个 SCK 周期主从移位寄存器共移，发第 N 字节同时必收第 N 字节（写即读）；CS 低选中、高锁存。
+
+```mermaid
+sequenceDiagram
+    participant M as 主设备 移位寄存器
+    participant S as 从设备 移位寄存器
+    Note over M,S: 每个 SCK 周期主从同时移位（全双工）
+    M->>S: CS 拉低 → 选中从设备，开始原子传输
+    M->>S: 字节1: 主发 0x9F(MOSI) / 从回 0xAB(MISO)
+    M->>S: 字节2: 主发 dummy / 从回 0xCD（读数据）
+    Note over M,S: 发第N字节的同时必收第N字节（写即读）
+    M->>S: CS 拉高 → 从设备锁存，传输结束
+```
+
 ### 3.1 单次传输逐位结构
 
 ```
@@ -52,6 +66,16 @@ CS(拉低) → [字节1: 8个SCK周期, 每周期移项] → ... → [字节N] �
 - **CS**：低有效，一次原子传输期间保持低；CS 上升沿通常表示从设备锁存本次结果。多从设备靠独立 CS 区分。
 - **每字节**：8 个 SCK 周期，MOSI 与 MISO 同时进行——全双工。
 - **位序（Bit Order）**：可配 MSB-first 或 LSB-first，主从须一致，否则字节内位序反了。
+
+> **图：CPOL/CPHA 四模式** —— CPOL 决定 SCK 空闲电平，CPHA 决定采样边沿，二者组合出 Mode0~3，主从须一致否则整帧错位。
+
+```mermaid
+flowchart TD
+    A[CPOL=0 空闲低] --> A0[Mode0 CPHA=0<br/>上升沿采样]
+    A --> A1[Mode1 CPHA=1<br/>下降沿采样]
+    B[CPOL=1 空闲高] --> B0[Mode2 CPHA=0<br/>下降沿采样]
+    B --> B1[Mode3 CPHA=1<br/>上升沿采样]
+```
 
 ### 3.2 关键控制参数（即"字段"）
 

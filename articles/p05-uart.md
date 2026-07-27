@@ -30,6 +30,28 @@ UART（Universal Asynchronous Receiver/Transmitter）与 USART 的区别在于 S
 Idle(高) | Start(1位 0) | Data(8位, LSB先) | Parity(可选0/1位) | Stop(1/1.5/2位 高) | Idle
 ```
 
+> 图：UART 8N1 异步帧比特布局——空闲为高电平，起始位下降沿对齐相位，数据位 LSB 先发，停止位拉高，每个字符独立同步。
+
+```mermaid
+gantt
+    title UART 8N1 异步帧（每格 = 1 bit，LSB 先发）
+    dateFormat X
+    axisFormat %s
+    section 一帧
+    Idle(高) : 0, 1
+    Start(0) : 1, 2
+    D0 : 2, 3
+    D1 : 3, 4
+    D2 : 4, 5
+    D3 : 5, 6
+    D4 : 6, 7
+    D5 : 7, 8
+    D6 : 8, 9
+    D7 : 9, 10
+    Stop(高) : 10, 11
+    Idle(高) : 11, 12
+```
+
 逐字段含义：
 
 | 字段 | 位宽 | 含义与作用 |
@@ -61,6 +83,18 @@ Idle(高) | Start(1位 0) | Data(8位, LSB先) | Parity(可选0/1位) | Stop(1/1
 更精细的 MCU 还提供**小数分频 / 过采样调节**：比如以 16 倍过采样（每个 bit 采 16 个 tick，取中间那拍），配合 `BRG` 整数和 `BRD` 小数寄存器，能把误差压到 <1%。反之，若时钟源是精度差的 RC 振荡器，即使分频完美，晶振本身 ±2% 漂移也会吃掉余量。
 
 经验法则：**总误差（双方累加）< 2%~3% 时，单字符内采样点不会滑出位中心；越长帧越危险**。所以长日志、长报文场景要把误差留足。
+
+> 图：波特率偏差让每个 bit 的采样相位逐拍累积偏移——字符越长，末端采样点越滑出位中心，最终误码成乱码。
+
+```mermaid
+flowchart LR
+    S(Start 下降沿 相位对齐) --> B0[Bit0 位中心采样]
+    B0 --> B1[Bit1 偏移 +Δ]
+    B1 --> B2[Bit2 偏移 +2Δ]
+    B2 --> B3[...]
+    B3 --> Bn[BitN 滑出位中心 → 误码]
+    style Bn fill:#f99,stroke:#333
+```
 
 下面是一段典型的 UART 初始化伪代码（基于寄存器视角，不绑定具体厂商）：
 

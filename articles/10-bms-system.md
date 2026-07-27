@@ -15,6 +15,36 @@
 
 为什么要把采样做在电芯旁边？因为上百节电芯串联，若把所有电压都拉线到中央板，线长、干扰、成本都不可接受。就近采集 + 隔离菊花链上报，是工程上最合理的选择——这正是 DSI3 / isoSPI 等专用协议存在的意义（见外设协议详解）。
 
+> BMS 主控 / 从控分层架构与信号流向（采集 → 计算 → 控制 → 通信）：
+
+```mermaid
+graph TD
+    subgraph CSC["从控 CSC (贴近电芯模组)"]
+        V["单体电压采样 mV 级"]
+        T["温度 NTC 采样"]
+        BAL["均衡执行"]
+    end
+    subgraph BMU["主控 BMU"]
+        CALC["SOC / SOH 估算<br/>故障判定"]
+        CTRL["高压控制<br/>均衡驱动"]
+        COMM["CAN / CAN FD 通信"]
+    end
+    隔离["隔离菊花链<br/>DSI3 / isoSPI"]
+    整车["整车 / 充电机"]
+
+    V --> 隔离
+    T --> 隔离
+    BAL --> 隔离
+    隔离 --> CALC
+    CALC --> CTRL
+    CTRL --> COMM
+    COMM --> 整车
+
+    style CSC fill:#efe,stroke:#333
+    style BMU fill:#eef,stroke:#333
+    style 隔离 fill:#ffe,stroke:#333
+```
+
 ## 三、核心采样：电压、温度、电流
 
 **1. 电压采样（高压采样）**
@@ -38,6 +68,22 @@ NTC 电阻 → 电压 → ADC → 查表/公式算温度。需多点布置：电
 - **霍尔传感器**：隔离、无损耗，但零点漂移需注意；
 - **分流电阻（shunt）**：精度高，但有压降、发热。
 电流是 SOC 安时积分的输入，其精度直接决定电量估算可信度。
+
+> 电芯采样拓扑：从单体到主控的采集链路：
+
+```mermaid
+flowchart LR
+    电芯["电芯单体"] --> 分压["分压电阻 + RC 滤波"]
+    分压 --> MUX["多路 MUX 切换"]
+    MUX --> ADC["ADC 转换<br/>满足建立时间"]
+    ADC --> IC["电芯监控 IC<br/>LTC68xx / MC3377x"]
+    IC --> 菊花链["隔离菊花链<br/>isoSPI / DSI3"]
+    菊花链 --> 主控["主控 MCU 决策"]
+    温度["NTC 温度"] --> ADC
+    电流["分流电阻 / 霍尔<br/>电流采样"] --> ADC
+    style IC fill:#bfb,stroke:#333
+    style 主控 fill:#bbf,stroke:#333
+```
 
 ## 四、SOC / SOH：电量与健康的估算
 

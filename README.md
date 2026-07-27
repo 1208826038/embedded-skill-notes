@@ -2,7 +2,7 @@
 
 > 个人知识沉淀 + 面试题库 + 实用工程脚本合集，面向汽车嵌入式 / BMS 软件工程师。
 
-本仓库收集了作者在学习与项目中沉淀的资料：**技能梳理文档、外设协议详解、离线模拟面试应用，以及一个可直接复用的 Polyspace 静态分析自动化脚本**。既可以作为复习资料，也可以作为技术作品集对外分享。
+本仓库收集了笔者在学习与项目中沉淀的资料：**技能梳理文档、外设协议详解、离线模拟面试应用、33 篇技术长文（含示意图）、学习路线导读，以及一套可打印的电子书**。既可以作为复习资料，也可以作为技术作品集对外分享。工程脚本（Polyspace / QAC / DBC 转换）已独立存放于私有仓库 [`embedded-scripts`](https://github.com/1208826038/embedded-scripts)。
 
 ---
 
@@ -10,20 +10,20 @@
 
 | 文件 | 说明 |
 |------|------|
-| `技能知识点梳理_章子淳.md` | 20 个模块技能梳理（内核/RTOS/功能安全/MCAL/通信/编译/工具链/BMS/诊断/低功耗/存储/AUTOSAR/测试/实时性/车规/信号完整性…），又深又广 |
-| `外设协议详解_章子淳.md` | 13 种外设协议逐字段（逐位/逐参数）详解 + 对应面试题（CAN/LIN/SPI/I²C/SMBus/UART/SENT/FlexRay/车载以太网/PWM/ICU/ADC/GPIO/DSI3/PSI5） |
-| `面试神器_章子淳.html` | 单文件离线 Web 应用：模拟面试（145 题 + 语音朗读/作答 + 智能评分 + 弱项复习 + 面试官追问）+ 知识学习（内嵌上述文档，可搜索）+ 收藏进度 |
-| `polyspace_automation.py` | **Polyspace 静态分析（MISRA / 功能安全）自动化脚本**，自动建工程、跑分析、处理报告、出 JSON 汇总 |
-| `qac_report_automation.py` | **QAC（QA-C）静态分析自动化 + 报告聚合脚本**，跑 QA-C 分析、管理 suppression/justification、用 protobuf 聚合报告（⚠️ 依赖 `Reports_pb2.py` / `ReportHelpers.py` / `schema/`，仓库未含，需自备） |
-| `dbc_to_tcan_converter.py` | **DBC → TCAN 配置转换 GUI 工具**（Tkinter），将 CAN 的 DBC 数据库转换为 `Can_44_TCAN4x5x` 的 PBcfg 配置代码；纯标准库、可独立运行 |
+| `技能知识点梳理.md` | 20 个模块技能梳理（内核/RTOS/功能安全/MCAL/通信/编译/工具链/BMS/诊断/低功耗/存储/AUTOSAR/测试/实时性/车规/信号完整性…），又深又广 |
+| `外设协议详解.md` | 13 种外设协议逐字段（逐位/逐参数）详解 + 对应面试题（CAN/LIN/SPI/I²C/SMBus/UART/SENT/FlexRay/车载以太网/PWM/ICU/ADC/GPIO/DSI3/PSI5） |
+| `面试神器.html` | 单文件离线 Web 应用：模拟面试（145 题 + 语音朗读/作答 + 智能评分 + 弱项复习 + 面试官追问）+ 知识学习（内嵌上述文档，可搜索）+ 收藏进度 |
+| `study-roadmap.md` | **文章学习路线导读**：把 33 篇按基础→进阶→专项分层，给出学习顺序、各阶段目标与自测建议 |
+| `技术文章合集.html` | **电子书（HTML 版）**：33 篇文章 + 学习路线聚合为单文件，含目录侧栏，mermaid 示意图在线渲染，可浏览器直接阅读或打印为 PDF |
+| `技术文章合集.pdf` | **电子书（PDF 版）**：由 HTML 版经 weasyprint 导出，含全部正文（示意图以源码呈现，建议优先用 HTML 版看动态图） |
 
-> 注：原始脚本文件名为 `新建 文本文档.txt`，内容为 Python，已重命名为 `polyspace_automation.py` 便于分享与运行。另一份 `新建 文本文档 - 副本.txt` 实为**不同的 QAC（QA-C）工具**（非 Polyspace 副本），已重命名为 `qac_report_automation.py`。
-
-📌 **关于 `qac_report_automation.py` 的依赖**：该脚本依赖同目录的 `Reports_pb2.py`（protobuf 生成）、`ReportHelpers.py`（含 `Global` 类）、`schema/` 等本地模块，仓库中**未包含**。若需要它真正跑起来，请补充这些文件后提交；当前仅作源码参考分享。
+> 📦 **工程脚本已移至私有仓库 [`embedded-scripts`](https://github.com/1208826038/embedded-scripts)**（Polyspace / QAC / DBC→TCAN 转换三件套）。主仓库保持「文档 + 文章 + 电子书」公开可分享；脚本因涉及具体工程目录结构，故独立私有保管。
 
 ---
 
-## 🛠 Polyspace 自动化脚本
+## 🛠 Polyspace 自动化脚本（用法说明）
+
+> 脚本本体已移至私有仓库 [`embedded-scripts`](https://github.com/1208826038/embedded-scripts)，以下为使用文档，供参考。
 
 ### 它能做什么
 - 自动探测编译系统：**CMake** 或 **eMake**（从 `Build.bat` 判断）。
@@ -82,7 +82,7 @@ python polyspace_automation.py -mode=ci -analysismode=specify -file=./changedFil
 ---
 
 ## 🧪 面试神器（HTML）用法
-直接用浏览器打开 `面试神器_章子淳.html` 即可（无需联网，语音朗读离线可用，语音识别需 Chrome/Edge 联网）。功能：
+直接用浏览器打开 `面试神器.html` 即可（无需联网，语音朗读离线可用，语音识别需 Chrome/Edge 联网）。功能：
 - **模拟面试**：145 道真题，逐题显示参考答案，自评掌握度，统计进度与正确率，支持方向筛选、随机、弱项优先、面试官追问。
 - **知识学习**：内嵌三份文档，可搜索高亮、目录跳转。
 - **收藏/进度**：localStorage 本地保存。

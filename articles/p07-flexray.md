@@ -18,6 +18,20 @@
 
 物理层上，FlexRay 是双通道（Channel A / Channel B）差分总线，速率可达 10 Mbps，支持总线型或星型拓扑，且**双通道可冗余**（同时发相同数据到 A、B 两路，一路故障另一路仍能通信），满足 ASIL D 高安全需求。
 
+> 图：FlexRay 通过冷启动节点广播时间基准，其余节点在 NIT 内用同步算法收敛到统一全局时基(macrotick)，TDMA 时隙才能严丝合缝对齐。
+
+```mermaid
+sequenceDiagram
+    participant CS as 冷启动节点
+    participant N1 as 节点1
+    participant N2 as 节点2
+    CS->>N1: 广播时间基准 / 同步帧
+    CS->>N2: 广播时间基准 / 同步帧
+    N1->>CS: 收敛本地时钟 → 全局时基
+    N2->>CS: 收敛本地时钟 → 全局时基
+    Note over CS,N2: NIT 内同步算法持续收敛 macrotick
+```
+
 ## 三、帧格式与通信周期逐字段拆解
 
 FlexRay 一帧结构：
@@ -30,6 +44,25 @@ FlexRay 一帧结构：
 
 ```
 静态段(Static, TDMA时隙) | 动态段(Dynamic, minislot) | 符号窗口(Symbol) | NIT(网络空闲时间)
+```
+
+> 图：FlexRay 通信周期——静态段按 TDMA 固定时隙分配各节点独家发送，动态段用 minislot 跑事件/诊断，符号窗口与 NIT 用于同步。
+
+```mermaid
+gantt
+    title FlexRay 通信周期（TDMA 静态段 + 动态段）
+    dateFormat X
+    axisFormat %s
+    section 静态段(确定性)
+    节点A 时隙 : 0, 10
+    节点B 时隙 : 10, 20
+    节点C 时隙 : 20, 30
+    节点D 时隙 : 30, 40
+    section 动态段(灵活)
+    诊断/事件 minislot : 40, 70
+    section 收尾
+    符号窗口 : 70, 80
+    NIT 同步 : 80, 100
 ```
 
 逐字段 / 逐段含义：

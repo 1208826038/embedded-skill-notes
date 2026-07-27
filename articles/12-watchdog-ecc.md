@@ -56,6 +56,17 @@ ECC 是 ISO 26262 里提升**诊断覆盖率（DC）**的关键手段。没有 E
 
 WWDG 计数器递减，喂狗写值必须落在 `[W_l, W_h)` 区间。以某主流车规 MCU 为例，窗口值由 `WWDG_CFR` 的窗口位域、递减计数器由 `WWDG_CR` 的 T[6:0] 控制；early 唤醒（提前喂）可在 `EARLYW` 标志触发中断做诊断，而非直接复位。
 
+```mermaid
+flowchart LR
+    A[计数器递减开始] --> B{到达窗口下界 W_l?}
+    B -- 未到就喂 --> C[early 错误<br/>触发复位/中断]
+    B -- 已到下界 --> D{在窗口 [W_l, W_h) 内?}
+    D -- 是,窗口内喂 --> E[喂狗成功<br/>计数器重载]
+    D -- 否,超过 W_h --> F[late 超时<br/>触发复位]
+```
+
+> 图：窗口看门狗（WWDG）喂狗时序，过早（early）或过晚（late）都触发复位，只有窗口内喂狗才有效。
+
 ### 3.2 ECC 处理伪代码
 
 ```c
@@ -73,6 +84,21 @@ void ECC_Fault_Handler(uint32_t addr, uint32_t syndrome) {
     }
 }
 ```
+
+```mermaid
+flowchart TD
+    A[内存访问] --> B{ECC 检测错误?}
+    B -- 无 --> C[正常读写]
+    B -- 有 --> D{单 bit or 双 bit?}
+    D -- 单 bit SEC --> E[硬件自动纠正]
+    E --> F[记 DEM: 单 bit 事件]
+    F --> C
+    D -- 双 bit DED/不可纠正 --> G[进入安全状态<br/>限功率/断高压]
+    G --> H[记 DEM: 多 bit 失败]
+    H --> I[必要时系统复位]
+```
+
+> 图：ECC 纠错流程，单 bit 自动纠正并登记，双 bit 进入安全状态绝不带错运行。
 
 ### 3.3 喂狗应由调度器驱动
 

@@ -2,7 +2,7 @@
 
 > 个人知识沉淀 + 面试题库 + 实用工程脚本合集，面向汽车嵌入式 / BMS 软件工程师。
 
-本仓库收集了笔者在学习与项目中沉淀的资料：**技能梳理文档、外设协议详解、离线模拟面试应用、46 篇技术长文（含示意图）、学习路线导读，以及一套可打印的电子书**。既可以作为复习资料，也可以作为技术作品集对外分享。工程脚本（Polyspace / QAC / DBC 转换）已独立存放于私有仓库 [`embedded-scripts`](https://github.com/1208826038/embedded-scripts)。
+本仓库收集了笔者在学习与项目中沉淀的资料：**技能梳理文档、外设协议详解、离线模拟面试应用、54 篇技术长文（含示意图）、学习路线导读，以及一套可打印的电子书**。既可以作为复习资料，也可以作为技术作品集对外分享。工程脚本（Polyspace / QAC / DBC 转换）已独立存放于私有仓库 [`embedded-scripts`](https://github.com/1208826038/embedded-scripts)。
 
 ---
 
@@ -13,8 +13,8 @@
 | `技能知识点梳理.md` | 20 个模块技能梳理（内核/RTOS/功能安全/MCAL/通信/编译/工具链/BMS/诊断/低功耗/存储/AUTOSAR/测试/实时性/车规/信号完整性…），又深又广 |
 | `外设协议详解.md` | 14 种外设协议逐字段（逐位/逐参数）详解 + 对应面试题（CAN/LIN/SPI/I²C/SMBus/UART/SENT/FlexRay/车载以太网/PWM/ICU/ADC/GPIO/DSI3/PSI5/DMA） |
 | `面试神器.html` | 单文件离线 Web 应用：模拟面试（145 题 + 语音朗读/作答 + 智能评分 + 弱项复习 + 面试官追问）+ 知识学习（内嵌上述文档，可搜索）+ 收藏进度 |
-| `study-roadmap.md` | **文章学习路线导读**：把 46 篇按基础→进阶→专项分层，给出学习顺序、各阶段目标与自测建议 |
-| `技术文章合集.html` | **电子书（HTML 版）**：46 篇文章 + 学习路线聚合为单文件，含目录侧栏，mermaid 示意图在线渲染，可浏览器直接阅读或打印为 PDF |
+| `study-roadmap.md` | **文章学习路线导读**：把 54 篇按基础→进阶→专项分层，给出学习顺序、各阶段目标与自测建议 |
+| `技术文章合集.html` | **电子书（HTML 版）**：54 篇文章 + 学习路线聚合为单文件，含目录侧栏，mermaid 示意图在线渲染，可浏览器直接阅读或打印为 PDF |
 | `技术文章合集.pdf` | **电子书（PDF 版）**：由 HTML 版经 weasyprint 导出，含全部正文（示意图以源码呈现，建议优先用 HTML 版看动态图） |
 
 > 📦 **工程脚本已移至私有仓库 [`embedded-scripts`](https://github.com/1208826038/embedded-scripts)**（Polyspace / QAC / DBC→TCAN 转换三件套）。主仓库保持「文档 + 文章 + 电子书」公开可分享；脚本因涉及具体工程目录结构，故独立私有保管。
@@ -89,7 +89,7 @@ python polyspace_automation.py -mode=ci -analysismode=specify -file=./changedFil
 
 ---
 
-## 📝 技术文章系列（46 篇）
+## 📝 技术文章系列（54 篇）
 
 基于仓库内两份梳理文档，为每个知识点撰写的长文深讲（场景引入 → 核心原理 → 生动类比 → 代码/时序 → 常见坑 → 面试要点），适合系统复习，也可作为个人技术博客 / 作品集。
 
@@ -149,6 +149,19 @@ python polyspace_automation.py -mode=ci -analysismode=specify -file=./changedFil
 - [BMS 核心算法全景与工程化部署](articles/b10-bms-algorithm-overview.md)
 - [BMS 硬件设计深解（选型/原理图/PCB/EMC）](articles/b11-bms-hardware-design.md)
 - [BMS 产品工程（需求/平台/成本/质量/竞品）](articles/b12-bms-product-engineering.md)
+
+### 四、操作系统进阶专项（8 篇）
+
+> 把 `02-rtos-tuning.md` 偏工程的 RTOS 内容，补上经典 OS 理论体系与嵌入式 Linux 落地——进程/线程、CPU 调度、同步死锁、虚拟内存、中断与系统调用、文件系统与 I/O、嵌入式 Linux 内核驱动、OS 全景与面试，与 RTOS/AUTOSAR/BMS 实战逐章呼应。
+
+- [进程、线程与执行流抽象](articles/o01-os-process-thread.md)
+- [CPU 调度算法：从指标到实时调度](articles/o02-os-scheduling.md)
+- [同步、互斥与死锁](articles/o03-os-sync-deadlock.md)
+- [内存管理：从分段到虚拟内存](articles/o04-os-memory.md)
+- [中断、异常与系统调用](articles/o05-os-interrupt-syscall.md)
+- [文件系统与 I/O 管理](articles/o06-os-fs-io.md)
+- [嵌入式 Linux：内核、驱动与启动](articles/o07-os-embedded-linux.md)
+- [OS 全景图、发展趋势与面试总览](articles/o08-os-overview-interview.md)
 
 ---
 

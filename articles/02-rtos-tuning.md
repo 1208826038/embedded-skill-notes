@@ -1185,7 +1185,261 @@ flowchart TD
 
 与通用 RTOS 相比，AUTOSAR OS 牺牲了动态灵活性（任务/资源多在生成期静态确定）换取**可认证、可静态分析的时间与空间确定性**。在选型时，若项目走 AUTOSAR 工具链，则 OS 由供应商（如 Vector、ETAS、Elektrobit）提供，开发者重点关注配置正确性而非内核实现（见第十五章）；若走轻量 MCU 自研栈，则 FreeRTOS/Zephyr 等更灵活，但时间/内存保护需自行借助 MPU 与监控任务补充。
 
-## 二十、结语
+## 二十、工程实测：延迟与抖动的量化测量（含真实数据）
+
+调优的第一原则：**先有尺子，再谈优化**。很多团队凭"感觉某个 ISR 很慢"去改代码，结果越改越乱。本节给出两套可落地的测量法，并给出一个 Cortex-M4 @ 120MHz 平台的真实延迟预算参考值——这些数字能把"实时性"从玄学变成可验收的指标。
+
+### 20.1 DWT CYCCNT 法：零侵入的周期计数
+
+Cortex-M 内置的 DWT（Data Watchpoint and Trace）单元有一个 **CYCCNT** 计数器，每个内核时钟自增，可读出任意两段代码之间的精确周期差。这种方法不占用 GPIO、不影响调度，是测量"关键路径耗时"的首选。
+
+```c
+/* 使能 DWT CYCCNT（Cortex-M3/M4/M7/M33 通用） */
+static inline void dwt_init(void) {
+    CoreDebug->DEMCR |= CoreDebug_DEMCR_TRCENA_Msk;   /* 开跟踪 */
+    DWT->CYCCNT = 0;
+    DWT->CTRL  |= DWT_CTRL_CYCCNTENA_Msk;             /* 启动计数器 */
+}
+static inline uint32_t dwt_now(void) { return DWT->CYCCNT; }
+
+/* 测量一段关键路径 */
+uint32_t t0 = dwt_now();
+do_critical_sampling();                 /* 被测函数 */
+uint32_t dt = dwt_now() - t0;           /* 周期差 */
+/* @120MHz: 1 cycle ≈ 8.33 ns，dt*8.33ns = 实际耗时 */
+```
+
+注意：CYCCNT 是 32 位，@120MHz 约 35.8 秒回绕，单次测量不会溢出；若被测段可能超 35 秒（基本不可能），需处理回绕。
+
+### 20.2 GPIO + 逻辑分析仪法：看"抢占关系"
+
+当想看**任务/ISR 之间的相互抢占与时间占比**时，软件计数器不够直观。最便宜有效的办法是在关键路径翻转一个 GPIO，用逻辑分析仪抓波形：
+
+```c
+/* 在任务循环 / ISR 入口翻转引脚，LA 直接看占空比与抢占 */
+#define MARK()  (GPIOA->BSRR = (1u << 8))        /* 置高 PA8 */
+#define UNMARK() (GPIOA->BSRR = (1u << (8+16)))  /* 清低 PA8 */
+
+void vHighFreqTask(void *pv) {
+    for (;;) {
+        MARK();
+        do_work();
+        UNMARK();
+        vTaskDelay(1);
+    }
+}
+```
+
+三个引脚分别标记"高优任务""低优任务""某 ISR"，就能在 LA 上一眼看出：高优任务是否被长 ISR 打断、低优任务占了多少 CPU。这是嵌入式工程师的"万用表"，零依赖、立即可用。
+
+### 20.3 一个真实的延迟预算表（Cortex-M4 @ 120MHz）
+
+下面是一颗典型 Cortex-M4（120 MHz，无 FPU 或 FPU 已使能且上下文已含）的中断/切换延迟分解参考值。注意这些是**典型/目标值**，具体因芯片 Flash 等待态、是否开 Cache、编译器优化等级而异：
+
+| 阶段 | 典型周期数 | 等效时间 @120MHz | 说明 |
+| --- | --- | --- | --- |
+| 硬件同步 + 取向量 | ~12 | ~100 ns | 硬件自动压栈/取异常向量 |
+| 最长关中断窗口 | ≤ 20（目标） | ≤ 167 ns | 用 `BASEPRI` 而非 `PRIMASK` 缩短 |
+| 尾链（Tail-chain）节省 | ~12 | ~100 ns | 背靠背异常省一次出/入栈 |
+| 最高优先级 ISR 关键段 | 视业务 | — | 应控制在预算内 |
+| PendSV 完整上下文切换 | 80~120 | 0.67~1.0 µs | 保存/恢复 R4–R11（含 FPU 另加） |
+| **中断响应延迟**（引脚→ISR 首条指令） | **~20（含尾链）** | **~170 ns** | 实时性硬指标 |
+| **任务切换延迟** | **~100~140** | **~0.8~1.2 µs** | PendSV 触发到新任务运行 |
+
+工程验收时，把"中断响应延迟 ≤ 200 ns""任务切换 ≤ 1.5 µs"写进需求，再用 20.1/20.2 的方法实测签字，远比"应该够快"可靠。
+
+### 20.4 抖动（Jitter）的测量与"画出来"
+
+确定性不只看平均值，更看**最坏情况与平均的差（抖动）**。做法：用 CYCCNT 对同段逻辑采样 N 次（如 1000 次），统计 max / avg / p99：
+
+```c
+uint32_t samples[1000];
+for (int i = 0; i < 1000; i++) {
+    uint32_t t0 = dwt_now();
+    do_critical_sampling();
+    samples[i] = dwt_now() - t0;
+}
+/* 求 max / avg / p99；抖动 = max - avg；WCET = max */
+```
+
+若 `max` 远大于 `avg`（比如 120 µs vs 40 µs），说明存在**非确定来源**：cache miss、DMA 抢带宽、长临界区、动态内存分配等。把每次最大采样对应的上下文（当时在跑什么任务、是否在 DMA 中）记下来，就是定位抖动根因的钥匙。
+
+```mermaid
+flowchart LR
+    A[测量 max/avg/p99] --> B{抖动 = max-avg 是否大?}
+    B -- 小 --> C[确定性达标 签字]
+    B -- 大 --> D[定位最大采样上下文]
+    D --> E[查 Cache miss / DMA / 长临界区]
+    E --> F[针对性修复]
+    F --> A
+```
+
+## 二十一、Cache / TCM / MPU 与确定性的工程权衡
+
+通用 RTOS 调优到中段，瓶颈往往不是调度算法，而是**存储层次（memory hierarchy）的非确定性**。这一节把 cache、紧耦合内存（TCM）、MPU 放到一起讲清工程取舍。
+
+### 21.1 Cache 对 WCET 的双刃剑
+
+- **I-Cache**：加速取指，但命中率随执行路径波动，导致**同一段代码的耗时在不同次运行间起伏**——这正是 WCET 难定的根源。功能安全场景常要求"可分析的最坏执行时间"，cache 的存在让静态分析变复杂。
+- **D-Cache**：加速数据访问，但**写回（write-back）策略**会引入不可预测的主存写回延迟；更麻烦的是与 **DMA 的一致性**：CPU 改了数据还在 cache 里没写回，DMA 读到的就是旧值（反之亦然），引发偶发数据错误。
+
+### 21.2 写回 vs 写通，以及与 DMA 的协同
+
+```c
+/* DMA 缓冲区的一致性操作（Cortex-M7 典型） */
+/* 1) CPU 填好发送缓冲，刷 cache 让 DMA 看到最新数据 */
+SCB_CleanDCache_by_Addr((uint32_t *)tx_buf, tx_len);
+start_dma_tx(tx_buf, tx_len);
+/* 2) DMA 写入接收缓冲，失效 cache 让 CPU 看到 DMA 写的新值 */
+wait_dma_rx_done();
+SCB_InvalidateDCache_by_Addr((uint32_t *)rx_buf, rx_len);
+process(rx_buf);
+```
+
+- **写通（write-through）**：CPU 写同时写 cache 和主存，DMA 一致性好，但每次写都访问主存，慢。
+- **写回（write-back）**：CPU 写只进 cache，省主存带宽，但必须用 `Clean`/`Invalidate` 手动维护一致性，忘了就出偶发 bug。
+
+工程取舍：对 DMA 频繁、对一致性敏感的区域，宁可标成 **non-cacheable**（靠 MPU）也不赌手动 clean 不出错。
+
+### 21.3 把热路径搬进 TCM：确定性的"终局"
+
+TCM（紧耦合内存）与内核同频、无等待态、无 cache 抖动，是实时性的最强保障。把**中断向量表、关键 ISR 代码、ISR 用到的数据、高优任务热循环**放进 ITCM/DTCM，可彻底消除 cache miss 带来的延迟尖刺。
+
+```ld
+/* 链接脚本片段：把关键函数放进 ITCM */
+.fastcode : {
+    *(.fastcode .fastcode.*)
+} > ITCM AT > FLASH        /* 加载在 FLASH，运行在 ITCM */
+```
+```c
+__attribute__((section(".fastcode"))) void CRITICAL_Isr(void) {
+    /* 这段代码与访问的数据都在 TCM，执行时间高度确定 */
+}
+```
+
+### 21.4 Cache 锁定（Cache Lockdown）
+
+部分 Cortex（如 M7 的 cache way 锁定）支持把指定 cache way 锁给关键代码/数据，保证其常驻不淘汰。对"一小段必须零 miss"的算法（如控制回路、解密）很有用，但会牺牲其他代码的 cache 容量，需谨慎评估。
+
+### 21.5 MPU 与 cache 属性一致性：最易踩的坑
+
+MPU 区域的 **TEX/C/B/S** 属性描述"这段内存是什么类型"，必须与硬件实际连接一致，否则功能错乱：
+
+| MPU 属性误配 | 后果 |
+| --- | --- |
+| 外设（Device）区误标成 Normal + cacheable | 访问被合并/乱序/读旁路边，破坏外设时序，寄存器写入丢失 |
+| 带 cache 的 RAM 区忘了 clean 就给 DMA 用 | DMA 读到旧值，偶发数据错 |
+| 代码区标成 XN（不可执行） | 取指 fault，直接 HardFault |
+| 强序（Strongly-ordered）区滥用 | 性能暴跌（每次访问都等总线完成） |
+
+```mermaid
+flowchart TB
+    subgraph H["存储层次 (确定性 高 -> 低)"]
+        TCM[ITCM/DTCM<br/>无等待/无 cache 最确定]
+        CACHE[I/D-Cache<br/>快但不确定]
+        SRAM[片上 SRAM<br/>有等待态]
+        EXT[外部 SDRAM/Flash<br/>等待态大/最不确定]
+    end
+    TCM --> CACHE --> SRAM --> EXT
+    NOTE[热路径/ISR 放 TCM<br/>DMA 缓冲标 non-cacheable<br/>外设区严禁 cacheable]
+```
+
+## 二十二、CoreSight 落地：用 DWT/ITM/ETM 把调度"画"出来
+
+第十七章讲了 Trace 工具链，本节下沉到芯片级：如何用 ARM CoreSight 组件**亲手**把调度行为流出来，并重建时间线。这是"看得见"能力的真正底座。
+
+### 22.1 DWT 数据/PC 采样
+
+DWT 不止 CYCCNT，还有比较器（Comparator），可配置"当 PC 命中某地址（函数入口）时发事件"，或用 **PC 采样（PC Sampling）** 周期性记录正在执行的指令地址，事后统计热点函数占用。配置示例（示意）：
+
+```c
+/* DWT 比较器 0：当 PC == func_addr 时触发 */
+DWT->COMP0 = (uint32_t)critical_func;
+DWT->MASK0 = 0;                       /* 精确匹配 */
+DWT->FUNCTION0 = (1 << DWT_FUNCTION0_FUNCTION_Pos);  /* 数据/PC 匹配事件 */
+/* 事件经 SWO 流出，工具侧统计命中次数 = 函数执行频率 */
+```
+
+### 22.2 ITM 软件追踪：零（几乎）开销的事件通道
+
+ITM（Instrumentation Trace Macrocell）提供 32 个激励端口（Stimulus），软件写 `ITM->PORT[x]` 即可把用户事件/printf 经 SWO 引脚流出，**不占用应用 CPU 时间**（写入若 SWO 空闲则瞬间完成，忙则丢弃或阻塞可选）。
+
+```c
+/* 在 FreeRTOS 任务切换钩子里打 ITM 事件（重建甘特图用） */
+#define TRC_TASK_IN  0x01
+#define TRC_TASK_OUT 0x02
+void vTraceTaskSwitch(uint32_t task_id, uint8_t in_out) {
+    if (ITM->TCR & ITM_TCR_ITMENA_Msk) {
+        ITM->PORT[0].u8 = (in_out == 1) ? TRC_TASK_IN  : TRC_TASK_OUT;
+        ITM->PORT[0].u16 = (uint16_t)task_id;   /* 紧跟任务 ID */
+        /* 时间戳由 DWT CYCCNT 在工具侧对齐 */
+    }
+}
+/* 启用 ITM：TCR.ITMENA=1, TER[0]=1, 并使能 SWO 时钟分频 */
+```
+
+### 22.3 ETM 指令流追踪
+
+ETM（Embedded Trace Macrocell）追踪**指令执行流**，可还原函数级甚至基本块级的真实耗时，是 WCET 实测的利器。它需调试探头（J-Link/ULINKpro）与工具（SEGGER SystemView、Percepio Tracealyzer、开源 openOCD+perf）配合解码。代价是探头成本与一定配置复杂度，但在"偶发超时死活复现不了"时，ETM 的指令级回放无可替代。
+
+### 22.4 重建调度时间线
+
+把 22.2 的 ITM 切换事件 + 22.1 的 DWT 周期戳组合，即可在工具侧拼出完整甘特图：
+
+```mermaid
+flowchart LR
+    A[RTOS 钩子写 ITM 事件<br/>task_in/out + id] --> B[SWO 引脚串行流出]
+    C[DWT CYCCNT 提供周期时间戳] --> B
+    B --> D[调试探头抓取]
+    D --> E[工具解码 + 对齐时间]
+    E --> F[任务甘特图<br/>抢占/阻塞/抖动一目了然]
+```
+
+工程上，把"ITM 任务切换钩子 + Tracealyzer"作为默认配置，任何实时性问题的排查都能从一张甘特图开始，而不是从猜开始。
+
+## 二十三、量产案例：一次"偶发超时"的根因深挖
+
+把前面所有手段串起来，看一个真实风味的量产排查故事——它集中体现了"测量→画出来→定位→修复→复测"的闭环。
+
+**现象**：某 BMS 主控的"电芯电压采样任务"偶发超期，导致 SOC 估算滞后，极端时误报"单体欠压"触发下电。故障概率极低（数千次采样偶发一次），QA 压力测试难复现。
+
+**第一步，先测量**：在采样 ISR 入口/出口加 CYCCNT 打点，连续采样 10000 次。结果 `avg ≈ 38 µs`，但 `max ≈ 118 µs`——抖动高达 80 µs，远超任务周期预算（50 µs）。
+
+**第二步，画出来**：用 ITM 钩子 + Tracealyzer 抓调度甘特图，发现所有超期样本都伴随一次**大块 CAN FD 接收 DMA**（整车报文批量刷入）。
+
+**第三步，定位根因**：DMA 从外部 SRAM 批量搬数据，**冲刷了 D-Cache**，使采样 ISR 取指/取数 cache miss 暴增；同时 DMA 占住总线，ISR 等待存储访问拉长。根本原因是"DMA 缓冲区可 cacheable + 采样热路径在普通 SRAM"双重叠加。
+
+**第四步，修复**：
+1. 采样 ISR 与其数据搬入 DTCM（链接脚本 `.fastdata` → DTCM）；
+2. CAN FD 的 DMA 接收缓冲区用 MPU 标为 **non-cacheable**，消除一致性维护负担；
+3. 降低 DMA 流优先级并分片传输，避免单次长占总线；
+4. 采样关键循环加 `__attribute__((section(".fastcode")))` 进 ITCM。
+
+**第五步，复测签字**：同样 10000 次采样，`max` 回落到 45 µs，`avg` 39 µs，抖动 < 6 µs，满足预算。把"采样路径必须 TCM + DMA 缓冲 non-cacheable"写进项目编码规范，防止复发。
+
+前后对比：
+
+| 指标 | 修复前 | 修复后 | 目标 |
+| --- | --- | --- | --- |
+| 采样 ISR avg | 38 µs | 39 µs | — |
+| 采样 ISR max（WCET） | 118 µs | 45 µs | ≤ 50 µs |
+| 抖动 (max-avg) | 80 µs | 6 µs | 小 |
+| 误报下电 | 偶发 | 0 | 0 |
+
+```mermaid
+flowchart TD
+    P[偶发采样超期/误报] --> M[加 CYCCNT 打点]
+    M --> G[ITM 钩子 + 甘特图]
+    G --> R[发现超期必伴 CAN FD DMA]
+    R --> K[DMA 冲刷 D-Cache + 占总线]
+    K --> F[TCM 放热路径 + DMA 缓冲 non-cacheable + 降优先级]
+    F --> V[复测 max 45us 达标]
+    V --> N[写入编码规范防复发]
+```
+
+这个案例说明：**实时性故障几乎从不是"算法慢"，而是"非确定来源（cache/DMA/临界区）在特定时序下叠加"**。尺子（测量）和镜子（Trace）缺一不可。
+
+## 二十四、结语
 
 RTOS 调优从来不是"调几个优先级"那么简单。它是一条从任务模型、调度语义、IPC 正确性，一路延伸到临界区长度、Cache 策略、浮点 ABI、栈余量与 DMA 一致性的纵深链路；而链路的最底层，是芯片内部 NVIC 的嵌套优先级、SysTick 的 24 位节拍、PendSV 延迟切换与 MPU 栈守卫这些硬件机制。笔者在近年的 BMS 与底盘项目中反复验证：绝大多数"莫名其妙的实时性故障"，最终都能追溯到**数据类型位宽、临界区滥用、栈溢出、IPC 误用**这四类根因之一。
 

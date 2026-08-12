@@ -2,7 +2,17 @@
 
 > 个人知识沉淀 + 面试题库 + 实用工程脚本合集，面向汽车嵌入式 / BMS 软件工程师。
 
-本仓库收集了笔者在学习与项目中沉淀的资料：**技能梳理文档、外设协议详解、离线模拟面试应用、55 篇技术长文（含示意图）、学习路线导读，以及一套可打印的电子书**。既可以作为复习资料，也可以作为技术作品集对外分享。工程脚本（Polyspace / QAC / DBC 转换）已独立存放于私有仓库 [`embedded-scripts`](https://github.com/1208826038/embedded-scripts)。
+本仓库收集了笔者在学习与项目中沉淀的资料：**技能梳理文档、外设协议详解、离线模拟面试应用、59 篇技术长文（含示意图）、学习路线导读，以及一套可打印的电子书**。既可以作为复习资料，也可以作为技术作品集对外分享。工程脚本（Polyspace / QAC / DBC 转换）已独立存放于私有仓库 [`embedded-scripts`](https://github.com/1208826038/embedded-scripts)。
+
+### 五、构建系统与工具链（4 篇）
+
+> 从“人肉点 Build”到工业化交付的底层支柱——Makefile 规则原语与自动依赖、GCC/Clang 编译器驱动与 ABI/诊断、CMake 现代 target-based 实践与交叉编译、eMake 分布式并行构建加速，与 `06-编译链接`、`07-工具链自动化` 互为纵深。
+
+- [Makefile 工程化全解：从规则原语到大型嵌入式构建](articles/m01-makefile-deep.md)
+- [编译器工程化深度：GCC/Clang 驱动、选项体系、ABI 与诊断](articles/m02-compiler-deep.md)
+- [CMake 现代实践：从“全局变量地狱”到 target-based 工程](articles/m03-cmake-deep.md)
+- [eMake（Electric Make / CloudBees Accelerator）深度：分布式并行构建的工程化加速](articles/m04-emake.md)
+
 
 ---
 
@@ -13,8 +23,8 @@
 | `技能知识点梳理.md` | 20 个模块技能梳理（内核/RTOS/功能安全/MCAL/通信/编译/工具链/BMS/诊断/低功耗/存储/AUTOSAR/测试/实时性/车规/信号完整性…），又深又广 |
 | `外设协议详解.md` | 14 种外设协议逐字段（逐位/逐参数）详解 + 对应面试题（CAN/LIN/SPI/I²C/SMBus/UART/SENT/FlexRay/车载以太网/PWM/ICU/ADC/GPIO/DSI3/PSI5/DMA） |
 | `面试神器.html` | 单文件离线 Web 应用：模拟面试（145 题 + 语音朗读/作答 + 智能评分 + 弱项复习 + 面试官追问）+ 知识学习（内嵌上述文档，可搜索）+ 收藏进度 |
-| `study-roadmap.md` | **文章学习路线导读**：把 55 篇按基础→进阶→专项分层，给出学习顺序、各阶段目标与自测建议 |
-| `技术文章合集.html` | **电子书（HTML 版）**：55 篇文章 + 学习路线聚合为单文件，含目录侧栏，mermaid 示意图在线渲染，可浏览器直接阅读或打印为 PDF |
+| `study-roadmap.md` | **文章学习路线导读**：把 59 篇按基础→进阶→专项分层，给出学习顺序、各阶段目标与自测建议 |
+| `技术文章合集.html` | **电子书（HTML 版）**：59 篇文章 + 学习路线聚合为单文件，含目录侧栏，mermaid 示意图在线渲染，可浏览器直接阅读或打印为 PDF |
 | `技术文章合集.pdf` | **电子书（PDF 版）**：由 HTML 版经 weasyprint 导出，含全部正文（示意图以源码呈现，建议优先用 HTML 版看动态图） |
 
 > 📦 **工程脚本已移至私有仓库 [`embedded-scripts`](https://github.com/1208826038/embedded-scripts)**（Polyspace / QAC / DBC→TCAN 转换三件套）。主仓库保持「文档 + 文章 + 电子书」公开可分享；脚本因涉及具体工程目录结构，故独立私有保管。
@@ -89,7 +99,7 @@ python polyspace_automation.py -mode=ci -analysismode=specify -file=./changedFil
 
 ---
 
-## 📝 技术文章系列（55 篇）
+## 📝 技术文章系列（59 篇）
 
 基于仓库内两份梳理文档，为每个知识点撰写的长文深讲（场景引入 → 核心原理 → 生动类比 → 代码/时序 → 常见坑 → 面试要点），适合系统复习，也可作为个人技术博客 / 作品集。
 

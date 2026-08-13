@@ -186,6 +186,7 @@
           <option value="skill">技能知识点梳理</option>
           <option value="proto">外设协议详解</option>
           <option value="adv">进阶深挖（新增）</option>
+        <option value="cbase">C语言基础</option>
         </select>
       </div>
       <div class="row" style="margin-top:10px">
@@ -193,6 +194,7 @@
         <button class="chip" data-doc="skill">技能梳理</button>
         <button class="chip" data-doc="proto">外设协议</button>
         <button class="chip" data-doc="adv">进阶深挖</button>
+        <button class="chip" data-doc="cbase">C语言基础</button>
         <span class="muted small" style="margin-left:auto" id="learnCount"></span>
       </div>
     </div>
@@ -574,6 +576,232 @@
 - 充电：GB/T 27930 桩-BMS CAN 通信握手→配置→参数→充电→结束；ISO 15118 即插即充(Plug&Charge)走 TLS。
 - 硬件 AFE：LTC681x/MC3377x 等专用监控 IC 采数十节电压+温度，经 DSI3/isoSPI 隔离菊花链上报。
 - 产品工程：产线标定/一致性分选/售后诊断/寿命预测/成本可靠性权衡/车规流程(APQP/PPAP)，把算法真正落地为可量产产品。
+</script>
+
+<!-- 文档4：C语言基础 -->
+<script type="text/markdown" id="md-cbase">
+# C 语言基础（嵌入式底层向）
+
+> 面向嵌入式 / MCU 底层开发，从「源码到运行」全链路讲解。每条配可运行示例与真实翻车点。配合题库里 `c` 标签的 144 道深挖题一起看，效果最佳。
+
+## 一、从源码到可执行：预处理→编译→汇编→链接
+
+C 程序不是「编译一下」就出来的，标准链路是四步：
+
+- 预处理（Preprocess）：`gcc -E`。展开 `#include`、替换宏、处理 `#if` 条件编译，删注释。输出纯 `.c` 文本。
+- 编译（Compile）：`gcc -S`。把预处理后的代码翻译成**汇编** `.s`。做类型检查、优化。
+- 汇编（Assemble）：`gcc -c`。汇编器把 `.s` 变成**可重定位目标文件** `.o`，含机器码、符号表、重定位表。
+- 链接（Link）：链接器把多个 `.o` 和库合并，做**符号决议**（找每个 undefined 符号的定义）和**重定位**（把相对地址改成最终绝对地址），产出可执行文件 / 镜像。
+
+关键区分：
+
+- **声明 vs 定义**：`extern int x;` 是声明（告诉编译器有这个符号）；`int x;` 是定义（真正分配存储）。头文件里放声明，`.c` 里放定义，否则多个 `.c` 包含同一头会 `multiple definition`。
+- **头文件该放什么**：只放声明（`extern`、函数原型、`typedef`、宏、`static inline`、被 `static inline` 包裹的小函数）。不要放普通函数体或全局变量定义。
+- **重复包含**：同一头被 A.c、B.c 包含，靠头文件守卫避免重定义：`#ifndef FOO_H` / `#define FOO_H` / `#endif`，或 `#pragma once`。
+- **常见链接错误**：`undefined reference to foo` = 声明了没链接到定义（忘了加 `.c` 进工程 / 库没链）；`multiple definition of foo` = 同一符号定义了两次。
+- **静态库 `.a` vs 动态库 `.so`**：`.a` 是 `.o` 的归档，链接时把用到的目标码拷进镜像（嵌入式常用，离线无依赖）；`.so` 运行时加载（桌面 Linux 常用，省空间但要带库）。
+- **map 文件**：链接产物，列出每个符号 / 段的最终地址与大小。查 `.bss`/`.data` 溢出、看谁占了 RAM、看函数落哪个段，必看。
+
+## 二、数据类型与底层表示
+
+整数是嵌入式的命根子，一定要用「精确宽度」：
+
+- **整型宽度**：`char/short/int/long/long long` 只保证*最小*宽度（如 `int` ≥ 16 位），具体由平台 / ABI 决定。32 位 MCU 上 `int` 通常 32 位，但 8 位机 `int` 常是 16 位——**不要假设 `int` 是 32 位**。
+- **char 的符号性是实现定义**：`char` 可能等同于 `signed char` 也可能 `unsigned char`。把 `char` 当小整数还做减法，可能得到负数——**当数值用时显式写 `signed char` / `uint8_t`**。
+- **stdint.h 精确宽度**：`int8_t/int16_t/int32_t/int64_t`、`uint8_t/.../uint64_t`、还有 `uintptr_t`（存指针）、`intptr_t`、`intmax_t`。**嵌入式一律用它们**，跨平台宽度一致，协议 / 寄存器映射不出错。
+- **补码**：负数 = 按位取反 + 1。`INT_MIN`（-2^31 for int32）没有对应的正数（范围不对称），对它取 `-` 是 UB（结果溢出）。
+- **整数提升（integer promotion）**：`char`/`short` 等「小整型」在绝大多数表达式里会先提升为 `int` 再算。所以 `uint8_t a=200, b=100; a+b` 是 `int` 300 而非回绕——但若赋回 `uint8_t` 会截断。这也是为啥 `a + b > 255` 比较时类型要留心。
+- **常用算术转换（usual arithmetic conversions）**：两个操作数类型不同时，按规则统一（如 `int` 与 `unsigned int` 一起算，`int` 转 `unsigned`）。
+- **浮点**：`float`（32 位）/ `double`（64 位）。**MCU 没有 FPU 时浮点靠软浮点库模拟，极慢且体积大**——能用定点（Q 格式）就别用浮点；要用就开硬浮点并注意 ABI 一致。
+- **bool**：C99 起有 `_Bool`，`<stdbool.h>` 提供 `bool`/`true`/`false`，本质是整数 0/1。
+- **字面量后缀**：`u`(无符号)、`l`/`ll`(长)、`ul`、`f`(float，如 `3.14f`)。大数不加 `U`/`L` 可能溢出 int 或告警。
+
+## 三、变量、常量、作用域、链接、存储期
+
+C 里每个对象有三组属性，面试必问：
+
+- **作用域（scope）**：标识符在哪儿可见——块作用域（{} 内）、文件作用域（全局）、函数原型作用域、函数作用域（label）。
+- **链接（linkage）**：外部链接（全程序可见，`extern` 默认）、内部链接（仅本文件，`static` 全局）、无链接（局部变量）。
+- **存储期（storage duration）**：静态（程序全程）、自动（进入块分配、退出释放，局部变量默认）、动态（malloc）、线程（_Thread_local）。
+
+`const` 三种写法（常被考）：
+
+- `const int x = 5;`：x 是常量，不能再赋值。
+- `const int *p;`：p 指向的对象**不能通过 p 修改**（指向常量）。
+- `int * const p;`：p 这个指针本身不能改（常量指针），但指向的对象可改。
+- `const int * const p;`：两者都不可改。
+
+嵌入式中 `const` 常用来映射**只读寄存器**或把表放 **Flash**：`const uint8_t table[] = {...};` 默认进 `.rodata`（或 Flash）。
+
+- **枚举 vs 宏**：`enum { RED, GREEN, BLUE };` 比 `#define RED 0` 好——有类型、可调试、不会名冲突。但 C 的枚举底层仍是 `int`，不能强约束取值。
+- **static 两种含义**：全局变量 / 函数前 = 内部链接（仅本文件可见，避免符号污染）；局部变量前 = 静态存储期（只初始化一次，函数退出仍在）。
+- **extern**：声明「这个符号在别的文件定义」，用于跨文件引用全局。
+- **全局变量的取舍**：方便但破坏可重入、初始化顺序难控、占 RAM。嵌入式里多用 `static` + getter，或只读表用 `const`。
+
+## 四、运算符、表达式与隐式转换
+
+- **优先级与结合性**：经典坑——`*` `/` `%` 高于 `+` `-`；`==`/`!=` 低于位运算 `&` `^` `|`；`=` 优先级极低（别写成 `if(a=b)`）；`&&` 高于 `||`。不确定就加括号。
+- **前缀 vs 后缀**：`++i` 先加后用，`i++` 先用后加。C 里基本等价，但语义上「前缀不产生临时值」。**迭代里优先 `++i`**。
+- **短路求值**：`&&` 左为假、`||` 左为真时右操作数**不计算**——常用于空指针保护：`if(p && p->val){...}`。注意右操作数里的副作用不会执行。
+- **位运算**：`&`(与) `|`(或) `^`(异或) `~`(取反) `<<` `>>`。寄存器操作天天用。
+- **符号扩展**：有符号小类型提升为宽类型时，**符号位向左扩展**（负数补 1）。`int8_t a=-1; int b=a;` → b = -1（0xFFFFFFFF），不是 255。
+- **有符号 / 无符号混用（大坑）**：表达式中 `int` 与 `unsigned int` 混算，`int` 会转 unsigned。于是 `int a=-1; if(a < 5u)` 是**假**（因为 -1 转成超大正数）。比较、数组下标、循环计数都容易踩。
+- **显式转换 cast**：`(uint32_t)x` 只改解释类型，不改底层位；强转指针类型用于映射寄存器（`*(volatile uint32_t*)0x40021000`）。
+- **逗号运算符**：`a = (b=1, b+2);` 取最后一个值。
+- **序列点与求值顺序**：C 不保证函数参数、逗号表达式各子表达式的求值顺序（除 `&&`/`||`/`?:`/逗号运算符这些有序列点的）。**别在一个表达式里多次修改同一变量。**
+
+## 五、控制流
+
+- **悬空 else（dangling else）**：`else` 总是绑定最近的 `if`。多层嵌套 if/else 不加大括号极易读错逻辑——**一律加 `{}`**。
+- **switch / case 穿透**：case 之间不写 `break` 会顺序执行（fall-through）。无意穿透是 bug；有意穿透要加注释说明。
+- **状态机**：`switch(state){ case S_IDLE: ... break; ... }` 是嵌入式最常用写法。
+- **for / while / do-while**：`for(;;)` 与 `while(1)` 都是死循环（裸机 main 常用）；`do-while` 至少执行一次。
+- **goto 的合理用法**：嵌套多层跳出、统一错误清理（集中 `free`/`close` 回到 `fail:` 标签）。其它场景尽量别用。
+- **卫语句（guard clause）**：函数开头 `if(bad) return;` 提前返回，减少嵌套、更易读。
+
+## 六、函数
+
+C **只有值传递**，这是核心：
+
+- **传值**：`void f(int x)` 收到的是副本，改 x 不影响实参。传结构体是**整块拷贝**——大结构体用 `const T*` 传更高效。
+- **传指针才是传地址**：`void f(int *p)` 改 `*p` 影响实参。
+- **返回大结构体**：可能产生临时对象 / 拷贝，能返指针就返指针（但要小心生命周期）。
+- **返回局部变量地址（经典 UB）**：`int* f(){ int x; return &x; }` 返回后 x 已销毁，得到**悬垂指针**，访问即未定义行为。
+- **递归**：每次调用压栈，深度大容易栈溢出；且 C **不保证尾递归优化**，别指望它省栈。
+- **inline**：只是给编译器的「建议」，编译器可忽略。小函数用 `static inline` 放头文件，避免调用开销又不污染符号。
+- **函数指针**：`void (*cb)(int)` 指向函数，用于回调、状态表、表驱动（替代巨型 `if/else`）。
+- **变参函数**：`printf` 家族用 `stdarg.h` 的 `va_list`；**类型不安全**，格式串和参数要自己对齐。
+- **static 函数**：文件内私有，符号不导出，减少冲突、便于优化。
+- **参数求值顺序未定义**：`f(g(), h())` 先调 g 还是 h 不确定；且别在参数里改同一全局。
+
+## 七、数组
+
+- **数组不是指针**：`int a[10];` 和 `int *p;` 类型不同。`sizeof(a)` 是整个数组字节数，`sizeof(p)` 是指针大小（32 位机 4 字节）。
+- **退化（decay）**：数组名在「表达式、函数参数、下标」里会退化成指向首元素的指针。`void f(int a[])` 等价于 `void f(int *a)`——函数里 `sizeof(a)` 是指针不是数组。
+- **多维数组行主序（row-major）**：`int m[3][4]` 在内存里按行连续：`m[0][0..3], m[1][0..3], m[2][0..3]`。遍历时**内层循环放列（连续访问）更快**（Cache 友好）。
+- **传多维数组**：函数参数必须指定「除第一维外」的所有维度：`void f(int m[][4])` 或 `int (*m)[4]`。
+- **VLA 变长数组（C99）**：`int a[n];` 栈上分配，**嵌入式慎用**（栈大小不可控、可能无此特性）。
+- **越界**：C **不检查**下标越界，越界是 UB，经典缓冲区溢出来源。`a[10]` 当 `a` 只有 5 个元素 → 踩相邻内存。
+- **长度计算**：`sizeof(arr)/sizeof(arr[0])` 只在「真数组」上有效，退化成指针后失效——所以常把长度当参数传。
+
+## 八、指针（核心中的核心）
+
+- **取址 `&` 与解引用 `*`**：`int x=5; int *p=&x; *p=10;` 之后 x 是 10。
+- **指针类型决定步长**：`p+1` 跳 `sizeof(*p)` 字节。`int*` 跳 4，`char*` 跳 1，`int(*)[4]` 跳 16。类型安全靠它。
+- **数组与指针等价**：`a[i]` 编译器理解为 `*(a+i)`，所以 `a[3]` == `3[a]`（能写但别写）。
+- **NULL 与空指针**：解引用空 / 野指针是 UB，必崩或 HardFault。用前判空。
+- **野指针**（未初始化，指向随机地址）与**悬垂指针**（指向已 `free` / 已退出作用域的对象）——两者解引用都 UB。
+- **指针数组 vs 数组指针**（极常考）：
+  - `int *p[10];`：p 是「含 10 个 `int*` 的数组」（指针数组）。
+  - `int (*p)[10];`：p 是「指向含 10 个 int 的数组的指针」（数组指针）。
+- **多级指针**：`int **pp;` 指向「指向 int 的指针」，常用于「指针数组」或「二维动态分配」。
+- **void\***：通用指针，可接任意类型，但**不能直接解引用**，必须先转成具体类型。`malloc` 返回 `void*`。
+- **const + 指针组合**：`const int *p`（指向不可改）/ `int * const p`（指针不可改）/ `const int * const p`（都不可改）——从右往左读最容易。
+- **返回局部数组 / 变量地址**：见第六节，悬垂指针，绝对禁止。
+
+## 九、字符串
+
+C 没有「字符串类型」，字符串是 `'\0'` 结尾的 `char` 数组：
+
+- **字面量字符串是只读**：`"abc"` 类型是 `const char[4]`（含 `\0`），存在 `.rodata`/Flash。**修改它 UB**——要改就先拷到数组 `char s[]="abc";`。
+- **字符串数组 vs 指针**：`char *s="x";` 指向只读区；`char s[]="x";` 是可写的栈数组。两者 `sizeof` 不同、可改性不同。
+- **求长 `strlen`**：返回**不含 `\0`** 的长度；`sizeof` 含 `\0`。
+- **拷贝 `strcpy`**：不检查目标大小，源比目标长就溢出。危险，禁用或用 `strlcpy`/自己封装带长度的。
+- **`strncpy` 的坑**：它**不保证**以 `\0` 结尾（当源长于 n 时截断不补 `\0`）——用完要手动 `dst[n-1]=0`。
+- **比较 `strcmp`**：返回 <0/0/>0 表示小于 / 等于 / 大于；**不能用 `==` 比字符串**（那比的是指针地址）。
+- **拼接 `strcat`**：同样不检查长度，溢出风险。
+- **安全做法**：用 `snprintf(dst, n, "%s", src)` 或自写带长度的拷贝，目标末尾一定补 `\0`。
+
+## 十、结构体与联合体
+
+- **对齐与填充（padding）**：成员按各自对齐要求排布，编译器在中间插空字节；整体大小还会补齐到「最大成员对齐」的整数倍。`sizeof(struct)` 含填充——**不要假设成员紧挨**。
+- **`#pragma pack` / `__attribute__((packed))`**：取消 / 压缩对齐省空间，但非对齐访问在部分架构（如 ARM 默认）会 HardFault 或变慢——映射硬件寄存器 / 协议时慎用，或明确按对齐布局。
+- **`offsetof(type, member)`**：取成员偏移，写协议解析、序列化时必备。
+- **位域 bit-field**：`struct { uint8_t a:4; uint8_t b:4; };` 省位。但**位域的布局是实现定义**（哪位是低位、是否跨字节），**不要用于跨平台协议或寄存器映射**——那要用移位手动拼。
+- **柔性数组（flexible array）**：`struct pkt { uint16_t len; uint8_t data[]; };` 末尾变长数组成员，配合 `malloc(len + n)` 做变长包，比指针 + 二次分配更省一次分配、内存连续。
+- **union 共用体**：所有成员共享同一段内存，大小取最大成员。用途：
+  - **判断大小端**：`union { uint32_t i; uint8_t b[4]; } u; u.i=1; u.b[0]==1 ? 小端 : 大端`。
+  - **类型双关（type punning）**：同一字节当不同类型读。严格别名规则下用 `memcpy` 而非强转指针，否则 UB。
+  - 省内存：同一时刻只用一个含义的字段时复用。
+- **结构体传参 / 赋值**：`a=b;` 逐成员拷贝；大结构体传 `const T*` 避免大拷贝。
+
+## 十一、预处理与宏
+
+- **`#include`**：文本包含，守卫防重。
+- **头文件守卫**：`#ifndef X_H` / `#define X_H` / ... / `#endif`。
+- **`#pragma once`**：非标准但几乎全支持，更省事；和守卫二选一即可（有些工程两者都写图保险）。
+- **`#define` 宏**：纯文本替换，**无类型、无求值顺序保障**。
+- **宏的坑**：
+  - 参数多次求值：`#define SQ(x) ((x)*(x))` 调 `SQ(a++)` → `((a++)*(a++))` 改两次，UB。
+  - 优先级：宏体、每个参数都要用括号包。`#define MUL(a,b) a*b` 调 `MUL(1+2,3)` → `1+2*3=7` 而非 9。正确：`#define MUL(a,b) ((a)*(b))`。
+- **`#` 字符串化 / `##` 拼接**：`#define STR(x) #x` 把参数变字符串；`##` 把两段粘成标识符。用于批量生成代码。
+- **条件编译**：`#if`/`#ifdef`/`#ifndef`/`#else`/`#elif`/`#endif`——平台差异（`#ifdef STM32`）、调试开关（`#ifdef DEBUG`）、特性开关。
+- **调试技巧**：`#define DBG(...) printf(__VA_ARGS__)` 配 `#ifdef DEBUG` 开关日志。
+- **`assert`**：`<assert.h>`，调试期抓捕不该发生的情况；定义 `NDEBUG` 后自动失效（发布版零开销）。
+- **别把宏当函数**：无类型检查、可能多次求值、难调试——能用 `static inline` 函数就别用宏。
+
+## 十二、内存模型与布局
+
+程序镜像和运行时内存分成几段：
+
+- **.text**：代码，只读、常驻 Flash/ROM。
+- **.rodata**：只读数据（`const` 全局、字符串字面量），也在 Flash。
+- **.data**：已初始化的全局 / 静态变量，初值存 Flash，启动时拷到 RAM。
+- **.bss**：未初始化（或初始化为 0）的全局 / 静态，启动时清零，不占 Flash 空间。
+- **堆 heap**：`malloc/free` 动态分配，向上增长。
+- **栈 stack**：函数调用、局部变量、返回地址，向下增长。
+
+嵌入式要点：
+
+- **栈溢出**：栈向下增长覆盖 `.bss`/全局或返回地址 → 诡异崩溃、数据错乱。检测：栈底放魔术字（`0xDEADBEEF`）定期查、用 MPU 保护栈底、开看门狗兜底。
+- **为什么 MCU 常禁堆**：动态分配有**不确定时延**、会**碎片化**、失败时难处理，破坏实时性确定性。**裸机 / RTOS 关键任务基本不用 malloc**，用静态缓冲池。
+- **内存泄漏**：`malloc` 后没 `free`，池子慢慢耗尽。
+- **RAM 紧张**：全局 / 静态占 .data+.bss，栈大小在链接脚本配；要算清峰值栈 + 全局，别超芯片 RAM。
+
+## 十三、位运算实战（寄存器操作必备）
+
+操作硬件寄存器天天用，记住套路：
+
+- 置位第 n 位：`reg |= (1u << n);`（`1u` 防符号问题）。
+- 清位：`reg &= ~(1u << n);`
+- 取（测试）位：`if(reg & (1u << n)) {...}`
+- 翻转：`reg ^= (1u << n);`
+- 取一段位：`val = (reg >> POS) & MASK;`
+- 写一段位（read-modify-write）：`reg = (reg & ~(MASK << POS)) | ((val & MASK) << POS);`
+- 异或交换（不用临时变量）：`a^=b; b^=a; a^=b;`（面试题，实际少用）。
+- **逻辑右移 vs 算术右移**：`>>` 对**无符号**是逻辑移位（补 0）；对**有符号**是实现定义，多数编译器做算术移位（补符号位）。可移植写法：先转 `unsigned` 再移。
+- **移位位数 ≥ 宽度是 UB**：`x << 32` 当 x 是 32 位时未定义，先想清类型。
+- **volatile 必须用**：寄存器是「编译器看来会变」的内存，`volatile uint32_t*` 阻止编译器缓存 / 重排读写。
+
+## 十四、常见陷阱与未定义行为（UB）
+
+这些写错不报错、运行才炸，面试高频：
+
+- **整数溢出**：有符号溢出是 UB（结果不可预期）；无符号回绕（定义良好但要清楚语义）。
+- **数组越界 / 缓冲区溢出**：不检查，踩内存。
+- **解引用空 / 野 / 悬垂指针**：必崩或 HardFault。
+- **返回局部变量地址**：悬垂指针。
+- **浮点相等比较**：浮点有精度误差，`a==b` 常为假；用 `fabs(a-b) < EPS`。
+- **`i = i++;` / `i++ + i++`**：同一变量在一个序列点内多次修改，求值顺序未定义 → UB。
+- **有符号 / 无符号混用比较**：`-1 < 5u` 为假（见第四节）。
+- **宏参数副作用**：`SQ(a++)`（见第十一节）。
+- **大小端错**：协议 / 存储跨平台收发，字节序搞反数据全错。
+- **strict aliasing 违反**：通过不兼容类型的指针访问同一对象（除非 `char*` 或 `memcpy`）是 UB，优化开了会出诡异结果。
+- **未初始化变量**：局部变量不自动清零，读它是垃圾值。
+
+## 十五、标准库、可移植性与工程实践
+
+- **printf 重定向**：嵌入式无操作系统终端，要自己实现 `_write`/`_read`（或 semihosting、或重定向到串口 / 环形缓冲），把 `stdout` 接到串口。否则 `printf` 没输出或卡死。
+- **`assert`**：调试抓非法，发布 `NDEBUG` 关闭。
+- **`ctype.h` 的坑**：`isalpha(c)` 等参数必须是 `unsigned char` 或 `EOF`；传负值 `char` 是 UB（中文 / 扩展 ASCII 易踩）。先转 `(unsigned char)`。
+- **`<inttypes.h>` 可移植打印**：`int32_t` 用 `PRId32`，`uint64_t` 用 `PRIu64`，`printf("%" PRId32, x)`，跨平台不告警。
+- **打印 `size_t`**：用 `%zu`（不是 `%d`，类型不匹配 UB / 警告）。
+- **复杂声明右左法则**：从标识符出发，向右看尽再向左看，遇 `)` 翻回继续。如 `int (*f[3])(int)` = 「f 是含 3 个『指向『返回 int 的函数』的指针』的数组」。
+- **MISRA C**：汽车嵌入式行业编码规范（MISRA C:2012），禁用 UB、限制危险写法，过车规必查（配 PC-lint / Coverity）。
+- **跨编译器 / 平台**：`int` 宽度、`char` 符号、对齐、字节序都随平台变——**用 stdint、用 memcpy 做类型双关、协议显式写字节序**，别假设。
+- **静态断言 `_Static_assert`（C11）**：编译期检查，如 `_Static_assert(sizeof(int)==4, "int must be 32-bit")`，不满足直接编译失败。
+
+> 本章与题库 `c` 标签的 144 道深挖题互为表里：本章讲「是什么、为什么」，题库题讲「面试官会怎么问、真实翻车点」。配合技能梳理文档里的「编译与链接」「信号完整性」等节一起复习，C 语言这一关基本稳。
 </script>
 
 <script>
@@ -1777,17 +2005,17 @@ function parseTable(rows){
 let docCache={};
 function getDoc(which){
   if(docCache[which])return docCache[which];
-  const id = which==='skill'?'md-skill':which==='proto'?'md-proto':which==='adv'?'md-adv':null;
+  const id = ({skill:'md-skill',proto:'md-proto',adv:'md-adv',cbase:'md-cbase'})[which]||null;
   let md='';
   if(which==='all'){md=[...document.querySelectorAll('script[type=text/markdown]')].map(s=>s.textContent).join('\n\n');}
   else md=document.getElementById(id).textContent;
   docCache[which]=mdToHtml(md); return docCache[which];
 }
 function buildToc(which){
-  const whichs = which==='all'?['skill','proto','adv']:[which];
+  const whichs = which==='all'?['skill','proto','adv','cbase']:[which];
   const toc=$('#toc'); toc.innerHTML='';
   whichs.forEach(w=>{
-    const md=document.getElementById(w==='skill'?'md-skill':w==='proto'?'md-proto':'md-adv').textContent;
+    const md=document.getElementById(({skill:'md-skill',proto:'md-proto',adv:'md-adv',cbase:'md-cbase'})[w]).textContent;
     md.split('\n').forEach(l=>{ if(l.startsWith('## ')){const a=document.createElement('a');a.href='#';a.textContent=l.slice(3);
       a.onclick=(e)=>{e.preventDefault();const h=[...document.querySelectorAll('#docView h2')].find(x=>x.textContent===l.slice(3));if(h)h.scrollIntoView({behavior:'smooth'});};toc.appendChild(a);} });
   });
@@ -1807,9 +2035,9 @@ $('#searchBox').oninput=(e)=>{
   const q=e.target.value.trim().toLowerCase(); const view=$('#docView');
   if(!q){view.innerHTML=getDoc($('#docSel').value);buildToc($('#docSel').value);return;}
   const which=$('#docSel').value;
-  const mds = which==='all'?['skill','proto','adv']:[which];
+  const mds = which==='all'?['skill','proto','adv','cbase']:[which];
   let blocks=[];
-  mds.forEach(w=>{ const md=document.getElementById(w==='skill'?'md-skill':w==='proto'?'md-proto':'md-adv').textContent;
+  mds.forEach(w=>{ const md=document.getElementById(({skill:'md-skill',proto:'md-proto',adv:'md-adv',cbase:'md-cbase'})[w]).textContent;
     md.split(/\n\n+/).forEach(b=>{ if(b.toLowerCase().includes(q)) blocks.push(b); }); });
   if(blocks.length===0){view.innerHTML='<p class="muted">未找到匹配内容，换个关键词试试。</p>';$('#toc').innerHTML='';return;}
   const re=new RegExp('('+q.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')+')','gi');

@@ -25,6 +25,7 @@
 | `外设协议详解.md` | 14 种外设协议逐字段（逐位/逐参数）详解 + 对应面试题（CAN/LIN/SPI/I²C/SMBus/UART/SENT/FlexRay/车载以太网/PWM/ICU/ADC/GPIO/DSI3/PSI5/DMA） |
 | `面试神器.html` | 单文件离线 Web 应用：模拟面试（931 题 + 语音朗读/作答 + 智能评分 + 弱项复习 + 面试官追问）+ 知识学习（内嵌上述文档，可搜索）+ 收藏进度 |
 | `autosar_os.md` | **AUTOSAR OS 深度解析**：18 节、中文 6600+ 字、含 15 张配置/对比表，系统讲透 OS 定位与 OSEK 渊源、对象模型、任务/中断/计数器/闹钟/调度表/事件/资源优先级天花板、多核 Spinlock/IOC、内存与时序保护、钩子、调度运行时逻辑、与 RTE/BSW 协同、XML 配置项、SC1–SC4 可扩展等级；既随 面试神器.html 内嵌检索，也可单独阅读 |
+| `e2e.md` | **AUTOSAR E2E 端到端通信保护 深度解析**：11 节、中文 5300+ 字、含 6 张对比/参数表，系统讲透 E2E 定位与 7 类通信故障模型、三层架构（E2E Library / Transformer / State Machine）、CRC+Counter+Data ID 三基石、Profile 1–11 全谱系与选型、CRC 多项式与 Data ID 拼接、Transformer 收发路径与 Offset 布局、接收状态机、配置项详解、与 ISO 26262 功能安全/ASIL 分解/SecOC 的关系及工程翻车点；既随 面试神器.html 内嵌检索，也可单独阅读 |
 | `study-roadmap.md` | **文章学习路线导读**：把 60 篇按基础→进阶→专项分层，给出学习顺序、各阶段目标与自测建议 |
 | `技术文章合集.html` | **电子书（HTML 版）**：60 篇文章 + 学习路线聚合为单文件，含目录侧栏，mermaid 示意图在线渲染，可浏览器直接阅读或打印为 PDF |
 | `技术文章合集.pdf` | **电子书（PDF 版）**：由 HTML 版经 weasyprint 导出，含全部正文（示意图以源码呈现，建议优先用 HTML 版看动态图） |
@@ -96,7 +97,7 @@ python polyspace_automation.py -mode=ci -analysismode=specify -file=./changedFil
 ## 🧪 面试神器（HTML）用法
 直接用浏览器打开 `面试神器.html` 即可（无需联网，语音朗读离线可用，语音识别需 Chrome/Edge 联网）。功能：
 - **模拟面试**：931 道真题，逐题显示参考答案，自评掌握度，统计进度与正确率，支持方向筛选、随机、弱项优先、面试官追问。
-- **知识学习**：内嵌五份文档（技能梳理 / 外设协议 / 进阶深挖 / C 语言基础 / AUTOSAR OS 深度解析），可搜索高亮、目录跳转。
+- **知识学习**：内嵌六份文档（技能梳理 / 外设协议 / 进阶深挖 / C 语言基础 / AUTOSAR OS 深度解析 / E2E 通信保护深度解析），可搜索高亮、目录跳转。
 - **收藏/进度**：localStorage 本地保存。
 
 ---

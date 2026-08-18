@@ -3250,7 +3250,7 @@ function parseTable(rows){
 let docCache={};
 function getDoc(which){
   if(docCache[which])return docCache[which];
-  const id = ({skill:'md-skill',proto:'md-proto',adv:'md-adv',cbase:'md-cbase',autosar:'md-autosar',e2e:'md-e2e'},flash:'md-flash'})[which]||null;
+  const id = ({skill:'md-skill',proto:'md-proto',adv:'md-adv',cbase:'md-cbase',autosar:'md-autosar',e2e:'md-e2e',flash:'md-flash'})[which]||null;
   let md='';
   if(which==='all'){md=[...document.querySelectorAll('script[type=text/markdown]')].map(s=>s.textContent).join('\n\n');}
   else md=document.getElementById(id).textContent;
@@ -3260,7 +3260,7 @@ function buildToc(which){
   const whichs = which==='all'?['skill','proto','adv','cbase','autosar','e2e','flash']:[which];
   const toc=$('#toc'); toc.innerHTML='';
   whichs.forEach(w=>{
-    const md=document.getElementById(({skill:'md-skill',proto:'md-proto',adv:'md-adv',cbase:'md-cbase',autosar:'md-autosar',e2e:'md-e2e'},flash:'md-flash'})[w]).textContent;
+    const md=document.getElementById(({skill:'md-skill',proto:'md-proto',adv:'md-adv',cbase:'md-cbase',autosar:'md-autosar',e2e:'md-e2e',flash:'md-flash'})[w]).textContent;
     md.split('\n').forEach(l=>{ if(l.startsWith('## ')){const a=document.createElement('a');a.href='#';a.textContent=l.slice(3);
       a.onclick=(e)=>{e.preventDefault();const h=[...document.querySelectorAll('#docView h2')].find(x=>x.textContent===l.slice(3));if(h)h.scrollIntoView({behavior:'smooth'});};toc.appendChild(a);} });
   });
@@ -3282,7 +3282,7 @@ $('#searchBox').oninput=(e)=>{
   const which=$('#docSel').value;
   const mds = which==='all'?['skill','proto','adv','cbase','autosar','e2e','flash']:[which];
   let blocks=[];
-  mds.forEach(w=>{ const md=document.getElementById(({skill:'md-skill',proto:'md-proto',adv:'md-adv',cbase:'md-cbase',autosar:'md-autosar',e2e:'md-e2e'},flash:'md-flash'})[w]).textContent;
+  mds.forEach(w=>{ const md=document.getElementById(({skill:'md-skill',proto:'md-proto',adv:'md-adv',cbase:'md-cbase',autosar:'md-autosar',e2e:'md-e2e',flash:'md-flash'})[w]).textContent;
     md.split(/\n\n+/).forEach(b=>{ if(b.toLowerCase().includes(q)) blocks.push(b); }); });
   if(blocks.length===0){view.innerHTML='<p class="muted">未找到匹配内容，换个关键词试试。</p>';$('#toc').innerHTML='';return;}
   const re=new RegExp('('+q.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')+')','gi');

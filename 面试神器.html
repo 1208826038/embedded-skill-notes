@@ -191,6 +191,8 @@
         <option value="e2e">E2E 通信保护</option>
         <option value="flash">Flash/EA/FEE/NVM</option>
         <option value="bms">BMS 算法与 Simulink</option>
+        <option value="uds">UDS 诊断</option>
+        <option value="asw">ASW 应用层</option>
         </select>
       </div>
       <div class="row" style="margin-top:10px">
@@ -203,6 +205,8 @@
         <button class="chip" data-doc="e2e">E2E 通信保护</button>
     <button class="chip" data-doc="flash">Flash/EA/FEE/NVM</button>
     <button class="chip" data-doc="bms">BMS 算法与 Simulink</button>
+    <button class="chip" data-doc="uds">UDS 诊断</button>
+    <button class="chip" data-doc="asw">ASW 应用层</button>
         <span class="muted small" style="margin-left:auto" id="learnCount"></span>
       </div>
     </div>
@@ -2251,6 +2255,390 @@ MATLAB + Simulink + `Simscape Electrical`（自带电池模块）/ `Stateflow`�
 
 </script>
 
+<script type="text/markdown" id="md-uds">
+# UDS 统一诊断服务深度解析（ISO 14229-1）
+
+> 面向底层/BSW 工程师：把 UDS 从"听过 $22 读数据"讲透到"会话状态机、传输层分段、AUTOSAR DCM/DEM 怎么落地、刷写流程怎么走"。这是车厂面试和 Bootloader 开发的硬通货。
+
+## 1. UDS 是什么、不是什么
+
+UDS（Unified Diagnostic Services，统一诊断服务）是 **ISO 14229-1** 定义的一套应用层诊断协议，运行在_tester（诊断仪/客户端）与 ECU（服务端）之间，基于**请求-响应**模型：客户端发一帧请求，ECU 回一帧响应。
+
+- 它不是 OBD-II：OBD-II（ISO 15031）是法规排放诊断，只管发动机/排放相关、PID 固定；UDS 是整车所有 ECU 的通用诊断，服务丰富、可扩展。OBD-II 可看作 UDS 的一个子集式存在。
+- 它不是传输协议：UDS 是应用层，真正在总线上跑要靠**传输层 ISO-TP（ISO 15765-2，基于 CAN）**或 **DoIP（基于以太网）**。
+
+## 2. 协议栈位置
+
+> 应用层：  UDS (ISO 14229-1)  —— 服务语义
+> 传输层：  ISO-TP (15765-2)   —— 长报文分段（CAN 每帧仅 8 字节）
+>         或 DoIP (13400)       —— 以太网承载
+> 网络层：  网络层 (15765-2 也含寻址)
+> 数据链路：CAN (或 Ethernet)
+> 物理层：  CAN 收发器 / 车载以太网
+
+在 AUTOSAR 里对应：DCM（诊断通信管理，实现 UDS）+ CanTp/DoIP（传输层）+ Com/CAN（通信）。
+
+## 3. 服务基本格式与负响应
+
+请求帧：`[SID] [子功能] [参数...]`。SID 是服务标识符（如 0x22）。
+
+正响应：`[SID + 0x40] [子功能] [数据...]`。注意正响应 SID = 原 SID + 0x40。例如读数据 $22 的正响应是 $62。
+
+负响应：`0x7F [SID] [NRC]`。NRC（Negative Response Code）说明失败原因。例如 `7F 22 31` 表示读数据请求越界（requestOutOfRange）。
+
+> 关键点：诊断仪判断成败就看回的是 SID+0x40（成功）还是 0x7F（失败带 NRC）。
+
+## 4. 核心服务详解
+
+### 4.1 $10 DiagnosticSessionControl（诊断会话控制）
+
+切换 ECU 会话模式。常见会话：
+
+| 会话 ID | 名称 | 用途 |
+|---|---|---|
+| 0x01 | defaultSession | 上电默认，多数服务禁用 |
+| 0x02 | programmingSession | 刷写/标定 |
+| 0x03 | extendedSession | 扩展诊断，解锁更多服务 |
+| 0x40+ | 自定义 | OEM 私有 |
+
+多数服务（如 $22/$2E/$27 等）只有在 non-default 会话才可用；default 下只允许少数（如 $3E）。
+
+### 4.2 $11 ECUReset（ECU 复位）
+
+子功能：0x01 hardReset、0x02 keyOffOnReset、0x03 softReset。刷写完或配置变更后常用 softReset 重启生效。
+
+### 4.3 $14 ClearDiagnosticInformation（清除故障）
+
+参数：DTC 组（如 0xFFFFFF 表示全部）。清掉 DEM 里记录的 DTC 及快照。
+
+### 4.4 $19 ReadDTCInformation（读故障，最核心服务之一）
+
+子功能极多，面试常考：
+
+| 子功能 | 含义 |
+|---|---|
+| 0x01 | 按状态掩码报告 DTC 数量 |
+| 0x02 | 按状态掩码报告 DTC 列表 |
+| 0x04 | 按 DTC 报告快照数据（Snapshot，故障时环境值） |
+| 0x06 | 按 DTC 报告扩展数据（计数/老化） |
+| 0x0A | 报告支持的 DTC（全部） |
+
+### 4.5 $22 ReadDataByIdentifier（按 ID 读数据）
+
+最常用的"读任何标定/状态"的接口。DID（Data Identifier）是 2 字节，OEM 自行分配：
+
+| DID 示例 | 内容 |
+|---|---|
+| 0xF190 | VIN 车辆识别号 |
+| 0xF180 | 硬件版本 |
+| 0xF181 | 软件版本 |
+| 0xF186 | ECU 零件号 |
+| 0x0100+ | 业务逻辑数据（电压/温度/SOC…） |
+
+### 4.6 $2E WriteDataByIdentifier（按 ID 写数据）
+
+对应 $22 的写版本，用于写标定、序列号、配置字等。通常需先经 $27 安全解锁。
+
+### 4.7 $23 / $24 读写内存
+
+$23 ReadMemoryByAddress、$24 ReadScalingDataByIdentifier，直接按地址读写，常用于底层调试（也最危险，必须安全门控）。
+
+### 4.8 $27 SecurityAccess（安全访问，Seed-Key）
+
+刷写/写关键数据前的"权限门"。流程：
+
+> 客户端: $27 01            (请求 seed，子功能奇数=请求)
+> ECU:    67 01 [seed]      (返回随机数 seed)
+> 客户端: 计算 key = f(seed)  (本地算法)
+> 客户端: $27 02 [key]      (子功能偶数=发送 key)
+> ECU:    67 02             (验证 key 正确 → 解锁)
+
+- 算法 f 是 OEM 私有（常是简单变换或查表），方向相反防逆向。
+- 失败 NRC：0x35 invalidKey、0x36 exceedNumberOfAttempts（次数超限锁死）、0x37 requiredTimeDelayNotExpired（需等待）。
+
+### 4.9 $28 CommunicationControl（通信控制）
+
+使能/禁止某些报文收发（如刷写时禁止应用报文，避免总线冲突）：子功能控制"普通报文/网络管理报文/二者"的收发开关。
+
+### 4.10 $2F InputOutputControlByIdentifier（输入输出控制）
+
+强制某 DID 的输入/输出为指定值，用于产线测试或故障排查（如强制输出高电平看执行器）。属"覆盖控制"，用完要恢复。
+
+### 4.11 $31 RoutineControl（例程控制）
+
+启动/停止/查询结果类"函数调用"。子功能：0x01 start、0x02 stop、0x03 requestResults。常用例程：部件自检、擦除内存、校验和。参数里带 routineIdentifier（RID）。
+
+### 4.12 $3E TesterPresent（诊断仪在线）
+
+子功能 0x00（通常）。作用是**保活**：default 会话有 S3 超时，长时间无 $3E 会退回 default，导致已解锁服务失效。刷写/诊断过程中周期性发 $3E。
+
+### 4.13 $85 ControlDTCSetting（DTC 设置控制）
+
+开启/关闭 DTC 的记录（不影响已存 DTC 读取）。刷写或特殊工况时可临时关闭记录避免误报。
+
+### 4.14 刷写四件套 $34/$36/$37
+
+- $34 RequestDownload：告诉 ECU 要下一段数据的格式/长度/地址。
+- $36 TransferData：逐块传数据（blockSequenceCounter 递增）。
+- $37 RequestTransferExit：传输结束。
+- 配合 $31 RoutineControl 做校验和/依赖检查。
+
+## 5. 负响应码 NRC 一览
+
+| NRC | 含义 | 触发场景 |
+|---|---|---|
+| 0x11 | serviceNotSupported | 当前会话/ECU 不支持该 SID |
+| 0x12 | subFunctionNotSupported | 子功能不支持 |
+| 0x13 | incorrectMessageLengthOrInvalidFormat | 长度错 |
+| 0x22 | conditionsNotCorrect | 前提条件不满足（如不在对应会话） |
+| 0x31 | requestOutOfRange | 参数超范围（DID/长度非法） |
+| 0x33 | securityAccessDenied | 未解锁 |
+| 0x35 | invalidKey | key 错误 |
+| 0x36 | exceedNumberOfAttempts | 尝试次数超限 |
+| 0x37 | requiredTimeDelayNotExpired | 时间延迟未到 |
+| 0x70 | uploadDownloadNotAccepted | 下载不被接受（地址/长度错） |
+| 0x72 | generalProgrammingFailure | 编程失败 |
+| 0x78 | requestCorrectlyReceived-ResponsePending | 忙，请等待（ECU 延时响应） |
+
+> 0x78 很特殊：ECU 收到请求但要长时间处理（如写 Flash），先回 0x78 让诊断仪别超时，处理完再回正式响应。
+
+## 6. 会话 / 安全状态机与时序
+
+- **会话状态机**：上电 default → 收 $10 03 进 extended → 可解锁服务；进 $10 02 programming 才能刷写。default 下 S3 超时（典型几千 ms）自动回 default，已解锁状态清空。
+- **安全等级**：每个会话可有多个安全等级（security level），不同等级允许不同服务/$27 算法。
+- **时序参数**：
+  - P2：ECU 收到请求到开始响应的超时（默认 ~50ms）。
+  - P2*：发过 0x78 后的扩展超时（~5000ms）。
+  - S3：诊断仪两次通信间的最大间隔（保活超时）。
+
+## 7. 传输层 ISO-TP（为什么需要分段）
+
+CAN 一帧只有 8 字节（经典 CAN），而 UDS 请求/响应（如 $34/$36 刷写数据、长 DID 读）远超 8 字节。ISO-TP 四种帧：
+
+| 帧类型 | 用途 |
+|---|---|
+| SF 单帧 | 数据 ≤ 7 字节，一帧搞定 |
+| FF 首帧 | 长报文第一帧，带总长度 |
+| CF 连续帧 | 后续分片（带序号 0~15 循环） |
+| FC 流控帧 | 接收方告诉发送方：继续/等待/溢出，以及块大小/间隔 |
+
+多帧拼接后才是完整的 UDS 报文。DoIP（以太网）则是 TCP/UDP 承载，天然支持大包，用于高速刷写。
+
+## 8. AUTOSAR 中的诊断实现
+
+- **DCM（Diagnostic Communication Manager）**：实现 UDS。分三层：DSL（状态机/会话/时序/P2/S3）、DSD（服务分发/验 NRC）、DSP（具体服务处理）。配置 DID、RID、会话、安全等级。
+- **DEM（Diagnostic Event Manager）**：管理 DTC 的置位/清除/Debounce/老化/快照/扩展数据，供 $19 读取。DTC 状态字（8 位：测试失败/确认/_pending 等）按 ISO 14229 定义。
+- **FiM（Function Inhibition Manager）**：根据 DEM 事件抑制某些功能（如某传感器故障→禁用例程）。
+- **传输层模块**：CanTp（CAN）或 DoIP（以太网），把长 UDS 报文分段/重组。
+
+> 配置视角：你在 EB tresos / DaVinci 里配的是 DCM 的 DID 列表、$19 子功能使能、DEM 的 Event→DTC 映射、CanTp 的帧参数——不是手写协议栈。
+
+## 9. 典型刷写（Bootloader）流程
+
+> 1. 进入 extendedSession ($10 03)
+> 2. 关 DTC 记录 ($85 02) + 禁应用报文 ($28)
+> 3. 进 programmingSession ($10 02)
+> 4. 安全解锁 ($27 01/02, seed-key)
+> 5. 擦除 ($31 routine 擦除)
+> 6. 请求下载 ($34) → 传数据 ($36 ×N) → 结束 ($37)
+> 7. 校验 ($31 routine 校验和)
+> 8. 复位 ($11) 或 回 default
+
+## 10. 工程坑与面试高频
+
+- **坑**：忘了周期 $3E，会话超时掉回 default，刷写到一半解锁失效；ISO-TP 流控帧没发导致发送卡死；$78 被诊断仪当失败；DID 读写未配安全等级导致越权；多帧首帧长度算错。
+- **高频题**：
+  1. UDS 和 OBD-II 区别？
+  2. 正响应 SID 怎么算？负响应格式？
+  3. $22 和 $2E 区别？DID 是什么？
+  4. $19 有哪些子功能？DTC 状态字几位？
+  5. $27 seed-key 流程？NRC 35/36/37 含义？
+  6. 为什么需要 ISO-TP 分段？四种帧？
+  7. DoIP 是什么，为什么用以太网？
+  8. P2/P2*/S3 是什么？
+  9. 0x78 负响应什么意思？
+  10. AUTOSAR 里 DCM/DEM/FiM 各管什么？
+  11. 刷写完整流程？
+  12. 安全访问失败次数超限怎么处理？
+  13. 多帧报文怎么重组？
+  14. $3E 不发的后果？
+  15. 为什么写关键数据前要解锁？
+
+</script>
+
+<script type="text/markdown" id="md-asw">
+# AUTOSAR 应用层（ASW）模块深度解析
+
+> 面向应用层/BSW 工程师：把 AUTOSAR 应用层从"知道有 SWC"讲透到"端口/接口/Runnable/事件/RTE 生成代码/组合连接器/标定"全链路，让你能在工具里配出一个能跑的组件，并讲清它怎么和 OS、Com、NvM、DCM 协同。
+
+## 1. ASW 在 AUTOSAR 架构里的位置
+
+> ┌─────────────────────────────┐
+> │  应用层 ASW（SWC 组成）        │
+> ├─────────────────────────────┤
+> │  RTE（运行时环境，虚拟总线）    │
+> ├─────────────────────────────┤
+> │  BSW：服务层 / ECU 抽象 / MCAL │
+> ├─────────────────────────────┤
+> │  微控制器 + 外设                │
+> └─────────────────────────────┘
+
+核心原则：**SWC 不直接访问硬件、不调用 BSW API，所有对外交互必须经 RTE**。RTE 是 SWC 与 BSW 之间、SWC 与 SWC 之间唯一合法的通信通道（"虚拟总线"）。这带来可移植性：同个 SWC 换 ECU、换总线，只要 RTE 重生成即可。
+
+## 2. SWC（Software Component，软件组件）
+
+SWC 是应用层的"积木"，封装功能逻辑 + 数据接口。分两类：
+
+### 2.1 Atomic SWC（原子组件，最小部署单元）
+
+| 类型 | 说明 | 典型场景 |
+|---|---|---|
+| Application | 普通应用逻辑 | 控制算法、状态机 |
+| SensorActuator | 靠近硬件的传感/执行 | 读 ADC、控 PWM |
+| ComplexDeviceDriver (CDD) | 复杂驱动，**绕过 RTE 直接访问 MCAL/硬件** | 特殊时序、非标准器件 |
+| ServiceProxy | 代理基础软件服务 | 封装 NvM/Com 等服务 |
+| NvBlockSwComponent | 专用于 NvM 块管理 | 持久化数据 |
+
+> CDD 是"例外通道"：当标准接口（RTE）满足不了实时/特殊硬件需求时，允许 SWC 直接调 MCAL。但它破坏了纯虚拟总线约束，要谨慎用、要评审。
+
+### 2.2 Composition SWC（组合组件）
+
+本身不含逻辑，只是**拓扑容器**：把多个 Atomic SWC（甚至子 Composition）组装起来，定义它们之间的连接。类似"原理图里的框图"，用于系统级组织。
+
+## 3. 端口（Port）与接口（Interface）
+
+SWC 通过端口暴露接口。端口分两种：
+
+- **PPort（Provided，提供的）**：该 SWC 对外提供数据/服务（服务端）。
+- **RPort（Required，需求的）**：该 SWC 需要外部提供（客户端）。
+
+接口定义端口"传什么、怎么传"，有四种：
+
+| 接口类型 | 传什么 | 语义 |
+|---|---|---|
+| SenderReceiver (SR) | 数据元素 data element | 生产者发、消费者收；可非排队（最新值覆盖）或排队（FIFO，带深度） |
+| ClientServer (CS) | 操作 operation | 客户端调、服务端执行；可同步（阻塞等结果）或异步（回调） |
+| ModeSwitch | 模式 | 提供方广播模式变化（如 RUN/POSTRUN/SLEEP），需求方监听 |
+| Parameter | 标定参数 | 标定工具可改的常量（如阈值、系数） |
+
+> 关键点：一个 PPort 配一个接口，另一个 SWC 的 RPort 必须配**同一个接口**才能连接——接口是连接的"契约"。
+
+## 4. RunnableEntity（可运行实体）
+
+Runnable 是 SWC 里真正被执行的**函数体**，是算法/逻辑落地的地方。SWC 可以有多个 Runnable，各自由不同事件触发。
+
+### 4.1 事件（Event）类型
+
+| 事件 | 触发条件 |
+|---|---|
+| TimingEvent | 周期触发（如 10ms/100ms），最常见 |
+| DataReceivedEvent | 某 SR 数据到达时触发 |
+| OperationInvokedEvent | 某 CS 操作被调用时触发 |
+| ModeSwitchEvent | 模式切换时触发 |
+| DataSendCompletedEvent | 发送完成（排队端口） |
+| InitEvent | 启动时初始化一次 |
+
+Runnable 通过 RTE 配置**映射到 OS Task**：一个 Task 可挂多个 Runnable，Task 由 OS 按周期/优先级调度。所以"Runnable→Task→OS 调度"是应用层最终被执行的路径。
+
+## 5. RTE（Runtime Environment，运行时环境）
+
+RTE 是 AUTOSAR 的"中间件"，由工具(RTE Generator)根据 SWC + 系统配置**自动生成 C 代码**，不是手写的。
+
+### 5.1 提供的 API（生成代码里你调用的）
+
+| 调用 | 用途 |
+|---|---|
+| Rte_Read_<port>_<data>() | 读 SR 数据 |
+| Rte_Write_<port>_<data>() | 写 SR 数据 |
+| Rte_Call_<port>_<op>() | 调 CS 操作 |
+| Rte_Receive_ / Rte_Send_ | 排队端口收发 |
+| Rte_Mode_<port>() | 读当前模式 |
+| Rte_Enter_ / Rte_Exit_<area>() | 进入/退出排他区 |
+| Rte_Start/Rte_Stop | 启停 |
+
+### 5.2 通信语义
+
+- **同 ECU 内 SWC 间**：SR 直接走内存（全局缓冲区/队列），CS 直接函数调用——零拷贝、低开销。
+- **跨 ECU SWC 间**：RTE 把数据交给 Com 模块 → CAN/以太网发出 → 对端 Com 收 → 对端 RTE 交付。应用层代码**完全不变**，只是 RTE 生成的路由不同。这就是"虚拟总线"的价值。
+
+### 5.3 数据共享保护
+
+- **InterRunnableVariable (IRV)**：同一 SWC 内多个 Runnable 共享的变量。
+- **ExclusiveArea（排他区）**：`Rte_Enter`/`Rte_Exit` 包裹临界区，防止多 Runnable/中断并发改同一数据（底层靠关中断或 OS 资源实现）。
+
+## 6. 组合与连接器（Connectors）
+
+连接两个端口靠连接器，两种：
+
+- **Assembly Connector（装配连接器）**：直接把 A 的 PPort 连到 B 的 RPort（二者接口相同）。同 ECU 或跨 ECU均可。
+- **Delegation Connector（委派连接器）**：把 Composition 内部某 SWC 的端口"暴露/委派"到 Composition 的外部端口，实现封装——外部只看到组合的大端口，内部细节隐藏。常用于分层设计。
+
+> 设计直觉：Assembly 是"点对点接线"，Delegation 是"把内部线引到外壳插座"。
+
+## 7. NvM 与 SWC（持久化衔接）
+
+SWC 要存标定/学习值（如 BMS 的 SOC、故障快照），通过：
+
+- **NvBlockSwComponent**：专门管理一组 NvM Block 的 SWC。
+- 或经 ServiceProxy 调 NvM 服务：上电 `ReadAll` 把持久数据读进 RAM，运行中改了就 `WriteAll`/`WriteBlock` 落盘（经 Fee/Fls，见 Flash 章）。
+
+这把"应用层要记住东西"和"存储栈怎么写 Flash"解耦——SWC 只调 RTE/NvM 接口，不知道底下是 EEPROM 还是 Flash 模拟。
+
+## 8. 标定（Calibration）
+
+- **ParameterInterface**：SWC 暴露可标定参数（阈值、PID 系数、查表），标定工具（如 INCA/CANape）经 **XCP 协议**（on CAN 或 Ethernet）在线读写。
+- **Measurement（观测）**：把感兴趣变量标记为可观测，标定工具实时抓取曲线。
+- 产物 **A2L 文件**：描述参数/变量的地址、类型、物理换算（CompuMethod），是标定工具与 ECU 的"字典"。
+
+> 和前面 BMS 章衔接：BMS 的 OCV 表、容量、EKF 增益就是以 Parameter 形式标定，靠 XCP 在线调。
+
+## 9. 数据类型体系
+
+AUTOSAR 数据类型分三层，避免"物理意义"和"实现"混淆：
+
+- **ApplicationDataType (ADT)**：面向应用的语义类型（如 Temperature_T、SOC_Pct）。
+- **ImplementationDataType (IDT)**：具体实现类型（如 uint16、int32），带 byteOrder、bitLayout。
+- **BaseType**：最底层（如 uint16_le）。
+- **CompuMethod**：原始值↔物理值换算（线性 `phys = factor*raw + offset`、查表、文本表）。
+- **DataConstraint**：合法范围/报警范围。
+
+## 10. AUTOSAR 方法论（怎么从图纸到代码）
+
+1. 用工具画 SWC（arxml 描述：端口、接口、Runnable、事件）。
+2. 系统级：把 SWC 映射到 ECU、连 Assembly/Delegation。
+3. ECU 抽取：生成该 ECU 的 RTE 配置 + BSW 配置。
+4. 生成：RTE 代码 + BSW（OS/Com/NvM…）+ 集成 → 编译烧录。
+
+你日常改应用层，主要是改 SWC 的 arxml 和 Runnable 里的算法，然后重生成 RTE。
+
+## 11. 与 OS / BSW 协同小结
+
+- Runnable → OS Task（周期/事件）→ 调度执行。
+- SWC 经 RTE 调：Com（收发信号）、NvM（存读）、DCM/DEM（诊断/故障）、IoHwAb（经 CDD 到 MCAL）。
+- SWC 永远不直接 `#include` BSW 头文件调 BSW 函数——必须经 RTE。这是 AUTOSAR 分层铁律。
+
+## 12. 工程坑与面试高频
+
+- **坑**：端口接口名/数据类型不一致导致连不上；Runnable 周期设太短压垮 Task；排他区用错引发数据竞争；CDD 滥用破坏可移植；跨 ECU 忘了配 Com 信号路由；NvM Block 频繁写磨损。
+- **高频题**：
+  1. ASW 在架构哪层？为什么 SWC 不能直接访问硬件？
+  2. PPort 和 RPort 区别？
+  3. SR 和 CS 接口区别？什么时候用排队 SR？
+  4. Runnable 是什么？由什么触发？和 OS Task 关系？
+  5. RTE 是手写还是生成的？提供哪些 API？
+  6. 同 ECU 和跨 ECU 通信 RTE 处理有何不同？
+  7. Assembly 和 Delegation 连接器区别？
+  8. 什么是 IRV、ExclusiveArea？为什么需要？
+  9. SWC 怎么持久化数据（NvM 衔接）？
+  10. 标定 Parameter/XCP/A2L 是什么？
+  11. ADT/IDT/BaseType 三层类型干嘛用？
+  12. CDD 是什么，为什么慎用？
+  13. 为什么 AUTOSAR 强调 SWC 不经 RTE 不能调 BSW？
+  14. CompuMethod 干什么？
+  15. 组合 SWC 里放逻辑吗？
+
+</script>
+
 <script>
 /* ===================== 题库 ===================== */
 const CATS = {
@@ -3452,17 +3840,17 @@ function parseTable(rows){
 let docCache={};
 function getDoc(which){
   if(docCache[which])return docCache[which];
-  const id = ({skill:'md-skill',proto:'md-proto',adv:'md-adv',cbase:'md-cbase',autosar:'md-autosar',e2e:'md-e2e',flash:'md-flash',bms:'md-bms'})[which]||null;
+  const id = ({skill:'md-skill',proto:'md-proto',adv:'md-adv',cbase:'md-cbase',autosar:'md-autosar',e2e:'md-e2e',flash:'md-flash',bms:'md-bms',uds:'md-uds',asw:'md-asw'})[which]||null;
   let md='';
   if(which==='all'){md=[...document.querySelectorAll('script[type=text/markdown]')].map(s=>s.textContent).join('\n\n');}
   else md=document.getElementById(id).textContent;
   docCache[which]=mdToHtml(md); return docCache[which];
 }
 function buildToc(which){
-  const whichs = which==='all'?['skill','proto','adv','cbase','autosar','e2e','flash','bms']:[which];
+  const whichs = which==='all'?['skill','proto','adv','cbase','autosar','e2e','flash','bms','uds','asw']:[which];
   const toc=$('#toc'); toc.innerHTML='';
   whichs.forEach(w=>{
-    const md=document.getElementById(({skill:'md-skill',proto:'md-proto',adv:'md-adv',cbase:'md-cbase',autosar:'md-autosar',e2e:'md-e2e',flash:'md-flash',bms:'md-bms'})[w]).textContent;
+    const md=document.getElementById(({skill:'md-skill',proto:'md-proto',adv:'md-adv',cbase:'md-cbase',autosar:'md-autosar',e2e:'md-e2e',flash:'md-flash',bms:'md-bms',uds:'md-uds',asw:'md-asw'})[w]).textContent;
     md.split('\n').forEach(l=>{ if(l.startsWith('## ')){const a=document.createElement('a');a.href='#';a.textContent=l.slice(3);
       a.onclick=(e)=>{e.preventDefault();const h=[...document.querySelectorAll('#docView h2')].find(x=>x.textContent===l.slice(3));if(h)h.scrollIntoView({behavior:'smooth'});};toc.appendChild(a);} });
   });
@@ -3482,9 +3870,9 @@ $('#searchBox').oninput=(e)=>{
   const q=e.target.value.trim().toLowerCase(); const view=$('#docView');
   if(!q){view.innerHTML=getDoc($('#docSel').value);buildToc($('#docSel').value);return;}
   const which=$('#docSel').value;
-  const mds = which==='all'?['skill','proto','adv','cbase','autosar','e2e','flash','bms']:[which];
+  const mds = which==='all'?['skill','proto','adv','cbase','autosar','e2e','flash','bms','uds','asw']:[which];
   let blocks=[];
-  mds.forEach(w=>{ const md=document.getElementById(({skill:'md-skill',proto:'md-proto',adv:'md-adv',cbase:'md-cbase',autosar:'md-autosar',e2e:'md-e2e',flash:'md-flash',bms:'md-bms'})[w]).textContent;
+  mds.forEach(w=>{ const md=document.getElementById(({skill:'md-skill',proto:'md-proto',adv:'md-adv',cbase:'md-cbase',autosar:'md-autosar',e2e:'md-e2e',flash:'md-flash',bms:'md-bms',uds:'md-uds',asw:'md-asw'})[w]).textContent;
     md.split(/\n\n+/).forEach(b=>{ if(b.toLowerCase().includes(q)) blocks.push(b); }); });
   if(blocks.length===0){view.innerHTML='<p class="muted">未找到匹配内容，换个关键词试试。</p>';$('#toc').innerHTML='';return;}
   const re=new RegExp('('+q.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')+')','gi');

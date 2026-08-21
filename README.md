@@ -28,6 +28,8 @@
 | `e2e.md` | **AUTOSAR E2E 端到端通信保护 深度解析**：11 节、中文 5300+ 字、含 6 张对比/参数表，系统讲透 E2E 定位与 7 类通信故障模型、三层架构（E2E Library / Transformer / State Machine）、CRC+Counter+Data ID 三基石、Profile 1–11 全谱系与选型、CRC 多项式与 Data ID 拼接、Transformer 收发路径与 Offset 布局、接收状态机、配置项详解、与 ISO 26262 功能安全/ASIL 分解/SecOC 的关系及工程翻车点；既随 面试神器.html 内嵌检索，也可单独阅读 |
 | `flash.md` | **Flash 与 AUTOSAR 存储栈 深度解析（FLS / FEE / EA / MemIf / NvM）**：15 节、中文 4480+ 字、含 4 张对比/配置表，系统讲透 Flash 物理基础（NOR/NAND、先擦后写、磨损/保持/ECC）、存储栈分层架构、FLS 驱动、FEE 在 Flash 上模拟 EEPROM 的核心机制（逻辑块/写计数器/追加写/磨损均衡/扇区切换与紧凑化/即时数据/数据集）、EA 与 Fee 的对称与差异、MemIf 路由、NvM 块管理（三类块/RAM 镜像/ROM 默认/CRC/异步作业队列/ReadAll-WriteAll）、端到端读写时序推演、掉电与 CRC 容错、配置项总览、工程坑与功能安全挂钩、与 BMS 学习值/故障快照/标定持久化衔接；既随 面试神器.html 内嵌检索，也可单独阅读 |
 | `bms.md` | **BMS 核心算法与 Simulink 建模实现（SOC / SOH / 均衡 / 代码生成）**：9 节、中文 3200+ 字、含 3 张对比/参数表，面向底层工程师也能看懂：算法全景（SOC/SOH/SOP/SOE 为何只能估算）、电池等效电路模型（Rint/1RC/2RC/PNGV、OCV-SOC 滞回、HPPC 参数辨识）、SOC 估算（安时积分/EKF/UKF/OCV 融合/温度倍率老化补偿/初始校准）、SOH（容量/内阻法/SEI 老化机理/满充跟踪/ICA-dQ-dV）、均衡（被动能耗 vs 主动能量转移拓扑对比/判据策略/时间发热估算）、SOP/SOE/故障诊断、以及** Simulink 建模→Embedded Coder 生成车规 C 代码→MIL/SIL/PIL/HIL 验证全链路**（生成的 `BMS_step()` 结构、定点化、映射成 AUTOSAR Runnable、与 NvM 掉电保存衔接）、工程坑与面试要点、与简历量产亮点衔接；既随 面试神器.html 内嵌检索，也可单独阅读 |
+| `uds.md` | **UDS 统一诊断服务深度解析（ISO 14229-1）**：10 节、中文 1770+ 字、含 5 张对比/参数表，系统讲透 UDS 定位与 OBD-II 区别、协议栈位置、请求/响应/负响应格式、核心服务全集（$10/$11/$14/$19/$22/$23/$24/$27/$28/$2E/$2F/$31/$3E/$85 及 $34/$36/$37 刷写四件套）、NRC 负响应码一览、会话/安全状态机与时序（P2/P2*/S3）、ISO-TP 分段（SF/FF/CF/FC）与 DoIP、AUTOSAR DCM/DEM/FiM 实现、典型刷写流程、工程坑与面试高频；既随 面试神器.html 内嵌检索，也可单独阅读 |
+| `asw.md` | **AUTOSAR 应用层（ASW）模块深度解析**：12 节、中文 1590+ 字、含 4 张对比/参数表，系统讲透 ASW 在架构中的位置与「SWC 不经 RTE 不碰硬件」铁律、SWC 类型（Atomic 各子类/CDD/Composition）、端口 PPort/RPort 与四类接口（SenderReceiver/ClientServer/ModeSwitch/Parameter）、Runnable 与事件（Timing/DataReceived/OperationInvoked/ModeSwitch/Init）、RTE 生成代码与 API（Rte_Read/Write/Call/Mode/Enter-Exit）、同/跨 ECU 通信语义、Assembly/Delegation 连接器、NvM 与 SWC 衔接、标定 Parameter/XCP/A2L、数据类型三层体系（ADT/IDT/BaseType）、AUTOSAR 方法论、与 OS/BSW 协同、工程坑与面试高频；既随 面试神器.html 内嵌检索，也可单独阅读 |
 | `study-roadmap.md` | **文章学习路线导读**：把 60 篇按基础→进阶→专项分层，给出学习顺序、各阶段目标与自测建议 |
 | `技术文章合集.html` | **电子书（HTML 版）**：60 篇文章 + 学习路线聚合为单文件，含目录侧栏，mermaid 示意图在线渲染，可浏览器直接阅读或打印为 PDF |
 | `技术文章合集.pdf` | **电子书（PDF 版）**：由 HTML 版经 weasyprint 导出，含全部正文（示意图以源码呈现，建议优先用 HTML 版看动态图） |
@@ -99,7 +101,7 @@ python polyspace_automation.py -mode=ci -analysismode=specify -file=./changedFil
 ## 🧪 面试神器（HTML）用法
 直接用浏览器打开 `面试神器.html` 即可（无需联网，语音朗读离线可用，语音识别需 Chrome/Edge 联网）。功能：
 - **模拟面试**：931 道真题，逐题显示参考答案，自评掌握度，统计进度与正确率，支持方向筛选、随机、弱项优先、面试官追问。
-- **知识学习**：内嵌八份文档（技能梳理 / 外设协议 / 进阶深挖 / C 语言基础 / AUTOSAR OS 深度解析 / E2E 通信保护深度解析 / Flash 与存储栈深度解析 / BMS 算法与 Simulink 建模），可搜索高亮、目录跳转。
+- **知识学习**：内嵌十份文档（技能梳理 / 外设协议 / 进阶深挖 / C 语言基础 / AUTOSAR OS 深度解析 / E2E 通信保护深度解析 / Flash 与存储栈深度解析 / BMS 算法与 Simulink 建模 / UDS 诊断深度解析 / ASW 应用层深度解析），可搜索高亮、目录跳转。
 - **收藏/进度**：localStorage 本地保存。
 
 ---
